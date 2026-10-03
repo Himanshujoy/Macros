@@ -43,12 +43,17 @@ def curves_on_lookback_dates(yields: YieldTable) -> list[dict]:
 
 
 def last_target_change(fed: FedFundsTable) -> dict | None:
-    """The first day of the current target, with the range before and after."""
+    """The latest change in the published target: its first day in force, the ranges and the size."""
     current = (fed.target_lower[-1], fed.target_upper[-1])
     for index in range(len(fed.dates) - 1, 0, -1):
         before = (fed.target_lower[index - 1], fed.target_upper[index - 1])
         if before != current:
-            return {"date": fed.dates[index].isoformat(), "from": list(before), "to": list(current)}
+            return {
+                "effective": fed.dates[index].isoformat(),
+                "from": list(before),
+                "to": list(current),
+                "change_bp": basis_points(current[0], before[0]),
+            }
     return None
 
 

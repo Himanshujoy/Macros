@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -18,6 +19,8 @@ YEAR_URL = (
     "daily-treasury-rates.csv/{year}/all"
     "?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv"
 )
+INDEX_NAME = "saved.json"  # for each cached year, the day its file was fetched
+YIELD_BOUNDS = (-5.0, 30.0)
 _HEADER = re.compile(r"^(\d+(?:\.\d+)?) (Mo|Month|Yr)$")
 
 
@@ -60,6 +63,8 @@ def parse_year_csv(text: str) -> ParsedYear:
     for line in reader:
         if not line or not line[0].strip():
             continue
+        if len(line) != len(header):
+            raise SourceError(f"Treasury: a row has {len(line)} cells where the header has {len(header)}")
         try:
             day = datetime.strptime(line[0].strip(), "%m/%d/%Y").date()
         except ValueError:
@@ -71,9 +76,12 @@ def parse_year_csv(text: str) -> ParsedYear:
                 values[tenor.label] = None
                 continue
             try:
-                values[tenor.label] = float(cell)
+                value = float(cell)
             except ValueError:
                 raise SourceError(f"Treasury: bad value {cell!r} on {day}") from None
+            if not YIELD_BOUNDS[0] < value < YIELD_BOUNDS[1]:
+                raise SourceError(f"Treasury: implausible yield {cell!r} on {day}")
+            values[tenor.label] = value
         rows.append((day, values))
     return tenors, rows
 
@@ -103,19 +111,52 @@ def fetch_year(client: httpx.Client, year: int) -> str:
     return response.text
 
 
+def _read_index(cache_dir: Path) -> dict[str, str]:
+    try:
+        raw = json.loads((cache_dir / INDEX_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _write(path: Path, text: str) -> None:
+    """Writes through a temporary file, so an interrupted write never leaves half a file."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
+
+
+def _cached_year(cache_dir: Path, index: dict[str, str], year: int) -> ParsedYear | None:
+    """A cached year, but only if its file was fetched after that year ended and still parses."""
+    saved = index.get(str(year))
+    if not isinstance(saved, str) or saved <= f"{year}-12-31":
+        return None
+    try:
+        return parse_year_csv((cache_dir / f"{year}.csv").read_text(encoding="utf-8"))
+    except (OSError, SourceError):
+        return None
+
+
 def load(client: httpx.Client, cache_dir: Path, today: date) -> YieldTable:
-    """Every year from 1990. Past years come from the cache; the current year is always fetched."""
+    """Every year from 1990.
+
+    A year comes from the cache only if its file was fetched after the year ended. The current
+    year, and a past year last fetched before it ended, are fetched again.
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    fresh = {today.year, today.year - 1} if today.month == 1 else {today.year}
+    index = _read_index(cache_dir)
     parsed: list[ParsedYear] = []
     for year in range(FIRST_YEAR, today.year + 1):
-        path = cache_dir / f"{year}.csv"
-        if year in fresh or not path.exists():
+        result = _cached_year(cache_dir, index, year) if year < today.year else None
+        if result is None:
             text = fetch_year(client, year)
-            result = parse_year_csv(text)  # parse before caching, so a bad file is never cached
-            path.write_text(text, encoding="utf-8")
-        else:
-            result = parse_year_csv(path.read_text(encoding="utf-8"))
+            if year == today.year and not text.strip():
+                result = ([], [])  # the new year's file can be empty until its first trading day
+            else:
+                result = parse_year_csv(text)  # parse before caching, so a bad file is never cached
+            _write(cache_dir / f"{year}.csv", text)
+            index[str(year)] = today.isoformat()
+            _write(cache_dir / INDEX_NAME, json.dumps(index, indent=0, sort_keys=True) + "\n")
         if not result[1] and year < today.year:
             raise SourceError(f"Treasury: {year} has no rows")
         parsed.append(result)

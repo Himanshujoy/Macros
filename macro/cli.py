@@ -11,9 +11,10 @@ import httpx
 
 from macro import config
 from macro.build import build_dist
-from macro.errors import SourceError
+from macro.dates import add_months
+from macro.errors import MacroError, SourceError
 from macro.facts import build_facts
-from macro.fedwatch import FedWatchError, add_months
+from macro.fedwatch import FedWatchError
 from macro.odds import build_odds
 from macro.snapshot import build_snapshot
 from macro.sources import fomc, futures, nyfed, treasury
@@ -56,18 +57,17 @@ def refresh(
     """Fetches every source, calculates, and only then replaces dist/."""
     today = now.date()
     meetings = fomc.load(calendar_file)
-    ends = [meeting.end for meeting in meetings]
-    future = [end for end in ends if end > today]
-    if not future:
+    ahead = fomc.upcoming(meetings, now)
+    if not ahead:
         raise SourceError("FOMC calendar: no future meeting. Update data/fomc_meetings.json")
-    target = future[0]
+    target = ahead[0].end
 
     yields = treasury.load(client, cache / "treasury", today)
     fed = nyfed.load(client, today)
     target_month = (target.year, target.month)
     prices = futures.load(client, [add_months(target_month, shift) for shift in CONTRACT_SHIFTS])
     try:
-        odds = build_odds(target, ends, prices, fed)
+        odds = build_odds(now, meetings, prices, fed)
     except FedWatchError as exc:
         raise SourceError(f"odds: {exc}") from None
 
@@ -76,7 +76,7 @@ def refresh(
     build_dist(dist, site, snapshot)
     work.mkdir(parents=True, exist_ok=True)
     (work / "facts.json").write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
-    return {"snapshot": snapshot, "facts": facts, "future_meetings": len(future)}
+    return {"snapshot": snapshot, "facts": facts, "future_meetings": len(ahead)}
 
 
 def summary_lines(result: dict) -> list[str]:
@@ -86,12 +86,13 @@ def summary_lines(result: dict) -> list[str]:
         f"{tenor} {latest['yields'][tenor]:.2f}" for tenor in ("3M", "2Y", "10Y", "30Y") if tenor in latest["yields"]
     )
     summary = odds["summary"]
+    low, high = odds["current_range"]
     lines = [
         f"Snapshot {snapshot['snapshot_id']}",
         f"Yields as of {latest['date']}: {shown}",
         f"Fed funds as of {fed['effr_date']}: EFFR {fed['effr']:.2f}, "
-        f"target {fed['target_lower']:.2f}-{fed['target_upper']:.2f}",
-        f"Odds for {odds['meeting']} (priced {odds['priced_on']}): "
+        f"published target {fed['target_lower']:.2f}-{fed['target_upper']:.2f}",
+        f"Odds for {odds['meeting']} (priced {odds['priced_on']}, current range {low:.2f}-{high:.2f}): "
         f"cut {summary['cut']}, hold {summary['hold']}, hike {summary['hike']}",
         "Built dist/ (no analysis yet) and work/facts.json",
     ]
@@ -103,16 +104,25 @@ def summary_lines(result: dict) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m macro", description="Builds the macros page.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("refresh", help="fetch the data, calculate, and build dist/")
+    refresh_parser = commands.add_parser("refresh", help="fetch the data, calculate, and build dist/")
+    refresh_parser.add_argument("--debug", action="store_true", help="show the full error instead of a one-line message")
     args = parser.parse_args(argv)
 
     if args.command == "refresh":
         try:
             with make_client() as client:
                 result = refresh(client, utc_now(), **default_paths())
-        except SourceError as exc:
+        except MacroError as exc:
+            if args.debug:
+                raise
             print(f"Refresh stopped: {exc}", file=sys.stderr)
             print("dist/ was not changed.", file=sys.stderr)
+            return 1
+        except Exception as exc:  # a bug or an unforeseen reply: say so plainly
+            if args.debug:
+                raise
+            print(f"Refresh stopped by an unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            print("Run it again with --debug to see the full error.", file=sys.stderr)
             return 1
         print("\n".join(summary_lines(result)))
         return 0

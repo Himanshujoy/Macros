@@ -1,7 +1,12 @@
-"""Real sample data, recorded on 2026-10-03, shared by several test modules."""
+"""Sample data shared by several test modules. The values were recorded from the real sources on 2026-10-03."""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from macro.sources.fomc import Meeting
+
+NEW_YORK = ZoneInfo("America/New_York")
 
 CSV_2026 = """Date,"1 Mo","1.5 Month","2 Mo","3 Mo","4 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","20 Yr","30 Yr"
 10/02/2026,4.04,4.09,4.11,4.19,4.26,4.27,4.46,4.83,4.96,5.06,5.17,5.28,5.67,5.63
@@ -15,14 +20,15 @@ CSV_2025_GAP = """Date,"1 Mo","1.5 Month","2 Mo","3 Mo","4 Mo","6 Mo","1 Yr","2 
 CSV_1990 = """Date,"3 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","30 Yr"
 12/31/1990,6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26"""
 
+OLD_HEADER = 'Date,"3 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","30 Yr"'
+
 
 def treasury_csv_for(year: int) -> str:
     """A small yearly file: the real 2026 sample, or two made-up rows for any other year."""
     if year == 2026:
         return CSV_2026
-    header = 'Date,"3 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","30 Yr"'
     return (
-        f"{header}\n"
+        f"{OLD_HEADER}\n"
         f"12/30/{year},6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26\n"
         f"01/02/{year},6.60,6.70,6.80,7.10,7.35,7.60,7.95,8.00,8.20"
     )
@@ -64,15 +70,20 @@ PRICES: dict[tuple[int, int], dict[date, float]] = {
 }
 
 MEETING_ENDS = [date(2026, 7, 29), date(2026, 9, 16), date(2026, 10, 28), date(2026, 12, 9), date(2027, 1, 27)]
+MEETINGS = [Meeting(day) for day in MEETING_ENDS]
 
 HOLIDAYS = {date(2026, 9, 7)}  # Labor Day: no rate was published
 
 
-def effr_rows() -> list[dict]:
-    """EFFR as published from 27 July to 1 October 2026, newest first, as the API returns it."""
+def effr_rows(until: date = date(2026, 10, 1)) -> list[dict]:
+    """EFFR as published from 27 July 2026, newest first, as the API returns it.
+
+    Up to 1 October these are the real published values. A later `until` extends the last
+    real rate and range forward, for tests that need a longer table.
+    """
     rows = []
     day = date(2026, 7, 27)
-    while day <= date(2026, 10, 1):
+    while day <= until:
         if day.weekday() < 5 and day not in HOLIDAYS:
             hiked = day >= date(2026, 9, 17)
             rows.append(
@@ -89,25 +100,58 @@ def effr_rows() -> list[dict]:
     return rows
 
 
-def effr_payload() -> dict:
+def effr_payload(until: date = date(2026, 10, 1)) -> dict:
     """The recent rows plus two from December 2008, when the target became a range."""
     old = [
         {"effectiveDate": "2008-12-16", "type": "EFFR", "percentRate": 0.17, "targetRateFrom": 0.0, "targetRateTo": 0.25},
         {"effectiveDate": "2008-12-15", "type": "EFFR", "percentRate": 0.18, "targetRateFrom": 1.0},
     ]
-    return {"refRates": effr_rows() + old}
+    return {"refRates": effr_rows(until) + old}
+
+
+# Three rows exactly as the New York Fed returned them, with every field.
+NYFED_REAL_ROWS = [
+    {
+        "effectiveDate": "2026-10-01", "type": "EFFR", "percentRate": 3.88, "percentPercentile1": 3.85,
+        "percentPercentile25": 3.87, "percentPercentile75": 3.88, "percentPercentile99": 3.89,
+        "targetRateFrom": 3.75, "targetRateTo": 4.00, "volumeInBillions": 120, "revisionIndicator": "",
+    },
+    {
+        "effectiveDate": "2026-09-30", "type": "EFFR", "percentRate": 3.88, "percentPercentile1": 3.86,
+        "percentPercentile25": 3.88, "percentPercentile75": 3.89, "percentPercentile99": 3.92,
+        "targetRateFrom": 3.75, "targetRateTo": 4.00, "volumeInBillions": 83, "revisionIndicator": "",
+    },
+    {
+        "effectiveDate": "2000-07-03", "type": "EFFR", "percentRate": 7.03, "targetRateFrom": 6.5,
+        "intraDayLow": 5.5, "intraDayHigh": 7.5, "stdDeviation": 0.28, "revisionIndicator": "",
+    },
+]
+
+# The October 2026 contract as Yahoo returned it on 2026-10-03, trimmed to six bars.
+# The timestamps are the recorded ones: midnight in New York on each trading day.
+YAHOO_REAL_REPLY = {
+    "chart": {
+        "result": [
+            {
+                "meta": {"symbol": "ZQV26.CBT", "gmtoffset": -14400, "exchangeTimezoneName": "America/New_York"},
+                "timestamp": [1788321600, 1788408000, 1790222400, 1790308800, 1790827200, 1790913600],
+                "indicators": {"quote": [{"close": [96.205, 96.24, 96.105, 96.11, 96.115, 96.12]}]},
+            }
+        ],
+        "error": None,
+    }
+}
 
 
 def chart_payload(prices: dict[date, float]) -> dict:
-    """The shape of Yahoo's chart reply. Each timestamp is midnight in New York."""
-    offset = -14400
+    """A reply in Yahoo's shape. Each bar is stamped at midnight in New York on its trading day."""
     days = sorted(prices)
-    stamps = [int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp()) - offset for d in days]
+    stamps = [int(datetime(d.year, d.month, d.day, tzinfo=NEW_YORK).timestamp()) for d in days]
     return {
         "chart": {
             "result": [
                 {
-                    "meta": {"gmtoffset": offset},
+                    "meta": {"gmtoffset": -14400, "exchangeTimezoneName": "America/New_York"},
                     "timestamp": stamps,
                     "indicators": {"quote": [{"close": [prices[d] for d in days]}]},
                 }

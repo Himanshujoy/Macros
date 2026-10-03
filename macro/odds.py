@@ -1,14 +1,17 @@
 """Builds the odds block of data.json from futures prices."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from macro.dates import months_back, on_or_before
+from macro.dates import Month, months_back, on_or_before
 from macro.errors import SourceError
-from macro.fedwatch import STEP, MissingPrice, Month, distribution
+from macro.fedwatch import STEP, MissingPrice, distribution
+from macro.sources.fomc import Meeting, upcoming
 from macro.sources.nyfed import FedFundsTable
 
 SHOWN_FROM = 0.0005  # a range appears in the table once any column gives it at least 0.05%
+STALE_AFTER_DAYS = 5  # the rate table may trail the pricing date by a long weekend, not more
+NOW_FALLBACK_DAYS = 3  # how many of the latest price days to try for "now"
 
 
 def comparison_dates(price_days: list[date]) -> list[tuple[str, date | None]]:
@@ -24,32 +27,69 @@ def comparison_dates(price_days: list[date]) -> list[tuple[str, date | None]]:
 
 
 def build_odds(
-    target_end: date,
-    meeting_ends: list[date],
+    now: datetime,
+    meetings: list[Meeting],
     prices: dict[Month, dict[date, float]],
     fed: FedFundsTable,
 ) -> dict:
-    """Probabilities by target range for the meeting ending on `target_end`."""
-    price_days = sorted(prices.get((target_end.year, target_end.month), {}))
+    """Probabilities by target range for the next meeting whose statement is still ahead of `now`."""
+    ahead = upcoming(meetings, now)
+    if not ahead:
+        raise SourceError("FOMC calendar: no future meeting. Update data/fomc_meetings.json")
+    target = ahead[0].end
+    ends = [meeting.end for meeting in meetings]
+    statement_at = {meeting.end: meeting.statement_at for meeting in meetings}
+    price_days = sorted(prices.get((target.year, target.month), {}))
     if not price_days:
-        raise SourceError(f"odds: no futures prices for the {target_end} meeting")
+        raise SourceError(f"odds: no futures prices for the {target} meeting")
     rates = fed.effr_by_date()
-    columns = comparison_dates(price_days)
 
-    by_column: dict[str, dict[float, float] | None] = {}
-    for key, day in columns:
+    def priced_on(day: date, live: bool) -> tuple[dict[float, float], tuple[float, float]]:
+        """Shares by the lower bound of each target range, and the range in force, as priced on `day`.
+
+        The base range comes from the latest published row. A meeting that ended on or after
+        that row's date is not in the row yet, so it is counted here. Among those, a meeting
+        whose outcome the prices already reflect counts as a whole move.
+        """
+        base_day, lower, upper = fed.target_row(day)
+        if (day - base_day).days > STALE_AFTER_DAYS:
+            raise SourceError(f"odds: New York Fed data stops at {base_day}, too far behind prices of {day}")
+        pending = [end for end in ends if base_day <= end <= target]
+        if live:
+            decided = [end for end in pending if statement_at[end] <= now]
+            late = [end for end in decided if end > day]
+            if late:
+                raise SourceError(f"odds: prices have not caught up with the {late[0]} decision. Refresh later")
+        else:
+            decided = [end for end in pending if end <= day]  # a finished daily bar follows the statement
+        shares = distribution(day, pending, ends, prices, rates, decided)
+        settled = next(iter(distribution(day, decided, ends, prices, rates, decided))) if decided else 0
+        by_lower = {round(lower + STEP * count, 2): share for count, share in shares.items()}
+        return by_lower, (round(lower + STEP * settled, 2), round(upper + STEP * settled, 2))
+
+    now_day = None
+    failure: MissingPrice | None = None
+    for candidate in reversed(price_days[-NOW_FALLBACK_DAYS:]):
+        try:
+            now_shares, current = priced_on(candidate, live=True)
+        except MissingPrice as exc:
+            failure = failure or exc
+            continue
+        now_day = candidate
+        break
+    if now_day is None:
+        raise SourceError(f"odds: {failure}")
+
+    columns = comparison_dates([day for day in price_days if day <= now_day])
+    by_column: dict[str, dict[float, float] | None] = {"now": now_shares}
+    for key, day in columns[1:]:
         if day is None:
             by_column[key] = None
             continue
         try:
-            moves = distribution(day, target_end, meeting_ends, prices, rates)
-        except MissingPrice as exc:
-            if key == "now":
-                raise SourceError(f"odds: {exc}") from None
+            by_column[key] = priced_on(day, live=False)[0]
+        except MissingPrice:
             by_column[key] = None
-            continue
-        lower = fed.target_on(day)[0]
-        by_column[key] = {round(lower + STEP * count, 2): share for count, share in moves.items()}
 
     lowers = sorted(
         {
@@ -68,19 +108,16 @@ def build_odds(
             row[key] = None if shares is None else round(100 * shares.get(lower, 0.0), 1)
         outcomes.append(row)
 
-    now_day = columns[0][1]
-    current = fed.target_on(now_day)
-    now = by_column["now"]
-    held = round(current[0], 2)
+    held = current[0]
     return {
-        "meeting": target_end.isoformat(),
+        "meeting": target.isoformat(),
         "priced_on": now_day.isoformat(),
         "current_range": [current[0], current[1]],
         "columns": [{"key": key, "date": day.isoformat() if day else None} for key, day in columns],
         "outcomes": outcomes,
         "summary": {
-            "cut": round(100 * sum((share for lower, share in now.items() if lower < held), 0.0), 1),
-            "hold": round(100 * now.get(held, 0.0), 1),
-            "hike": round(100 * sum((share for lower, share in now.items() if lower > held), 0.0), 1),
+            "cut": round(100 * sum((share for lower, share in now_shares.items() if lower < held), 0.0), 1),
+            "hold": round(100 * now_shares.get(held, 0.0), 1),
+            "hike": round(100 * sum((share for lower, share in now_shares.items() if lower > held), 0.0), 1),
         },
     }

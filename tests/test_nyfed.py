@@ -5,7 +5,7 @@ import pytest
 
 from macro.errors import SourceError
 from macro.sources import nyfed
-from samples import effr_payload
+from samples import NYFED_REAL_ROWS, effr_payload
 
 
 def test_parse_orders_rows_oldest_first():
@@ -15,23 +15,37 @@ def test_parse_orders_rows_oldest_first():
     assert table.effr[-1] == 3.88
 
 
+def test_rows_recorded_from_the_real_api_parse():
+    table = nyfed.parse({"refRates": NYFED_REAL_ROWS})
+    assert table.dates == [date(2000, 7, 3), date(2026, 9, 30), date(2026, 10, 1)]
+    assert table.effr == [7.03, 3.88, 3.88]
+    assert (table.target_lower[0], table.target_upper[0]) == (6.5, 6.5)
+    assert (table.target_lower[-1], table.target_upper[-1]) == (3.75, 4.0)
+
+
 def test_a_single_target_fills_both_bounds():
     table = nyfed.parse(effr_payload())
     assert (table.target_lower[0], table.target_upper[0]) == (1.0, 1.0)
     assert (table.target_lower[1], table.target_upper[1]) == (0.0, 0.25)
 
 
+def test_target_row_gives_the_row_date_and_the_range_it_carries():
+    table = nyfed.parse(effr_payload())
+    assert table.target_row(date(2026, 9, 16)) == (date(2026, 9, 16), 3.5, 3.75)  # the meeting day: old range
+    assert table.target_row(date(2026, 9, 17)) == (date(2026, 9, 17), 3.75, 4.0)
+    assert table.target_row(date(2026, 9, 20)) == (date(2026, 9, 18), 3.75, 4.0)  # a Sunday
+
+
 def test_target_on_returns_the_range_in_force():
     table = nyfed.parse(effr_payload())
     assert table.target_on(date(2026, 9, 16)) == (3.5, 3.75)
-    assert table.target_on(date(2026, 9, 17)) == (3.75, 4.0)
-    assert table.target_on(date(2026, 9, 20)) == (3.75, 4.0)  # a Sunday
+    assert table.target_on(date(2026, 9, 20)) == (3.75, 4.0)
 
 
-def test_target_on_before_the_data_is_an_error():
+def test_target_row_before_the_data_is_an_error():
     table = nyfed.parse(effr_payload())
     with pytest.raises(SourceError):
-        table.target_on(date(2000, 1, 1))
+        table.target_row(date(2000, 1, 1))
 
 
 def test_effr_by_date():
@@ -53,6 +67,26 @@ def test_rows_without_a_rate_are_skipped():
 def test_unexpected_replies_are_source_errors(payload):
     with pytest.raises(SourceError):
         nyfed.parse(payload)
+
+
+GOOD = {"effectiveDate": "2026-10-01", "percentRate": 3.88, "targetRateFrom": 3.75, "targetRateTo": 4.0}
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        None,
+        "a string",
+        {**GOOD, "effectiveDate": "1 Oct 2026"},
+        {"percentRate": 3.88, "targetRateFrom": 3.75},
+        {**GOOD, "percentRate": "n/a"},
+        {**GOOD, "percentRate": 388},
+        {"effectiveDate": "2026-10-01", "percentRate": 3.88},
+    ],
+)
+def test_a_malformed_row_is_a_source_error(row):
+    with pytest.raises(SourceError, match="unexpected row"):
+        nyfed.parse({"refRates": [GOOD, row]})
 
 
 def test_load_asks_for_the_full_history():

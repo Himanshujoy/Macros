@@ -1,15 +1,21 @@
-"""Date helpers shared by the odds and the facts."""
+"""Date helpers shared by the sources, the odds and the facts."""
 from __future__ import annotations
 
 import calendar
 from bisect import bisect_right
 from datetime import date
 
+Month = tuple[int, int]  # (year, month)
+
+
+def add_months(month: Month, count: int) -> Month:
+    index = month[0] * 12 + (month[1] - 1) + count
+    return (index // 12, index % 12 + 1)
+
 
 def months_back(day: date, count: int) -> date:
     """The same day `count` months earlier, clamped to the end of a shorter month."""
-    index = day.year * 12 + (day.month - 1) - count
-    year, month = index // 12, index % 12 + 1
+    year, month = add_months((day.year, day.month), -count)
     return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
 
 

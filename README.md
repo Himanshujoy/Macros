@@ -9,7 +9,7 @@ A one-page view of US macro data, served at `https://macros.theta-markets.com/`.
 
 ## Status
 
-As of 2026-10-04 the project is being built. Only the project setup exists, and none of the commands below works yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
+As of 2026-10-04 the data pipeline works: `python -m macro refresh` fetches the data, calculates the rate odds and writes `dist/data.json`. The page, the analysis PDF and publishing are not built yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
 
 ## How it works
 
@@ -33,15 +33,17 @@ The tests never touch a real service. A guard fails any test that opens a networ
 
 ## Commands
 
-Each command arrives with the plan that builds it.
+Each command arrives with the plan that builds it. Run them with the project's interpreter, for example `.venv/bin/python -m macro refresh`.
 
-| Command | What it does | Plan |
+| Command | What it does | Status |
 |---|---|---|
-| `python -m macro refresh` | Fetches the data, calculates, and builds `dist/` | 1 |
-| `python -m macro preview` | Serves `dist/` locally | 2 |
-| `python -m macro analysis` | Turns an analysis file into the PDF | 3 |
-| `python -m macro publish` | Uploads `dist/` to the server and switches to it | 4 |
-| `python -m macro rollback` | Switches the server back to the previous snapshot | 4 |
+| `python -m macro refresh` | Fetches the data, calculates, and builds `dist/`. Add `--debug` to see a full error | Works |
+| `python -m macro preview` | Serves `dist/` locally | Plan 2 |
+| `python -m macro analysis` | Turns an analysis file into the PDF | Plan 3 |
+| `python -m macro publish` | Uploads `dist/` to the server and switches to it | Plan 4 |
+| `python -m macro rollback` | Switches the server back to the previous snapshot | Plan 4 |
+
+The first refresh downloads one Treasury file per year since 1990, so it takes about half a minute. Later runs fetch only the current year.
 
 ## Data sources
 

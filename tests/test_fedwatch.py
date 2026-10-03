@@ -7,7 +7,7 @@ from samples import MEETING_ENDS, PRICES, effr_rows
 
 RATES = {date.fromisoformat(row["effectiveDate"]): row["percentRate"] for row in effr_rows()}
 MEETING_MONTHS = {(day.year, day.month) for day in MEETING_ENDS}
-TARGET = date(2026, 10, 28)
+SEPTEMBER, OCTOBER = date(2026, 9, 16), date(2026, 10, 28)
 
 
 def percent(distribution):
@@ -18,10 +18,8 @@ def has_meeting(month):
     return month in MEETING_MONTHS
 
 
-def test_add_months_crosses_year_boundaries():
-    assert fedwatch.add_months((2026, 12), 1) == (2027, 1)
-    assert fedwatch.add_months((2027, 1), -1) == (2026, 12)
-    assert fedwatch.add_months((2026, 10), -2) == (2026, 8)
+def priced(day, pending, prices=PRICES, decided=()):
+    return fedwatch.distribution(day, pending, MEETING_ENDS, prices, RATES, decided)
 
 
 def test_month_average_counts_calendar_days_and_carries_over_weekends():
@@ -60,7 +58,7 @@ def test_combine_adds_move_counts_across_meetings():
 
 def test_rule_one_works_back_from_an_anchor_month_after_the_meeting():
     implied = {(2026, 10): 100 - 96.12, (2026, 11): 100 - 96.07}
-    moves = fedwatch.expected_moves(date(2026, 10, 28), implied.__getitem__, has_meeting)
+    moves = fedwatch.expected_moves(OCTOBER, implied.__getitem__, has_meeting)
     assert moves == pytest.approx(0.2214, abs=1e-4)
 
 
@@ -72,7 +70,7 @@ def test_rule_two_works_forward_from_an_anchor_month_before_the_meeting():
 
 def test_a_meeting_month_with_no_anchor_neighbour_is_an_error():
     with pytest.raises(fedwatch.FedWatchError, match="no anchor"):
-        fedwatch.expected_moves(date(2026, 10, 28), lambda month: 4.0, lambda month: True)
+        fedwatch.expected_moves(OCTOBER, lambda month: 4.0, lambda month: True)
 
 
 def test_rule_two_cannot_use_a_meeting_on_the_last_day_of_the_month():
@@ -84,32 +82,45 @@ def test_rule_two_cannot_use_a_meeting_on_the_last_day_of_the_month():
 
 
 def test_check_row_2_october():
-    result = fedwatch.distribution(date(2026, 10, 2), TARGET, MEETING_ENDS, PRICES, RATES)
-    assert percent(result) == {0: 77.9, 1: 22.1}
+    assert percent(priced(date(2026, 10, 2), [OCTOBER])) == {0: 77.9, 1: 22.1}
 
 
 def test_check_row_25_september():
-    result = fedwatch.distribution(date(2026, 9, 25), TARGET, MEETING_ENDS, PRICES, RATES)
-    assert percent(result) == {0: 35.8, 1: 64.2}
+    assert percent(priced(date(2026, 9, 25), [OCTOBER])) == {0: 35.8, 1: 64.2}
 
 
 def test_check_row_3_september_chains_two_meetings():
-    result = fedwatch.distribution(date(2026, 9, 3), TARGET, MEETING_ENDS, PRICES, RATES)
-    assert percent(result) == {0: 38.8, 1: 48.7, 2: 12.5}
+    assert percent(priced(date(2026, 9, 3), [SEPTEMBER, OCTOBER])) == {0: 38.8, 1: 48.7, 2: 12.5}
 
 
 def test_check_row_3_september_with_cmes_september_price():
     prices = {**PRICES, (2026, 9): {date(2026, 9, 3): 96.3125}}
-    result = fedwatch.distribution(date(2026, 9, 3), TARGET, MEETING_ENDS, prices, RATES)
-    assert percent(result) == {0: 37.2, 1: 49.7, 2: 13.1}
+    assert percent(priced(date(2026, 9, 3), [SEPTEMBER, OCTOBER], prices)) == {0: 37.2, 1: 49.7, 2: 13.1}
+
+
+def test_a_decided_meeting_counts_as_a_whole_move():
+    # Priced on 25 September, after the 16 September hike: the September contract implies 0.99 of a move.
+    undecided = priced(date(2026, 9, 25), [SEPTEMBER, OCTOBER])
+    decided = priced(date(2026, 9, 25), [SEPTEMBER, OCTOBER], decided=[SEPTEMBER])
+    assert percent(decided) == {1: 35.8, 2: 64.2}
+    assert 0 in undecided and undecided[0] > 0  # without the flag, noise leaks into "no move"
+
+
+def test_only_the_decided_meetings_gives_the_settled_move_count():
+    assert priced(date(2026, 9, 25), [SEPTEMBER], decided=[SEPTEMBER]) == {1: 1.0}
 
 
 def test_a_missing_contract_price_is_reported():
     prices = {month: days for month, days in PRICES.items() if month != (2026, 11)}
     with pytest.raises(fedwatch.MissingPrice, match="2026, 11"):
-        fedwatch.distribution(date(2026, 10, 2), TARGET, MEETING_ENDS, prices, RATES)
+        priced(date(2026, 10, 2), [OCTOBER], prices)
 
 
-def test_no_pending_meeting_is_an_error():
+def test_no_meeting_to_price_is_an_error():
     with pytest.raises(fedwatch.FedWatchError, match="no meeting"):
-        fedwatch.distribution(TARGET, TARGET, MEETING_ENDS, PRICES, RATES)
+        priced(date(2026, 10, 2), [])
+
+
+def test_a_pending_meeting_in_a_finished_month_is_an_error():
+    with pytest.raises(fedwatch.FedWatchError, match="not caught up"):
+        priced(date(2026, 10, 2), [SEPTEMBER, OCTOBER])

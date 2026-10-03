@@ -1,6 +1,12 @@
 from datetime import date
 
-from macro.dates import months_back, on_or_before
+from macro.dates import add_months, months_back, on_or_before
+
+
+def test_add_months_crosses_year_boundaries():
+    assert add_months((2026, 12), 1) == (2027, 1)
+    assert add_months((2027, 1), -1) == (2026, 12)
+    assert add_months((2026, 10), -2) == (2026, 8)
 
 
 def test_months_back_keeps_the_day_when_it_exists():

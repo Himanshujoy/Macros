@@ -89,7 +89,7 @@ def test_fed_funds_facts_include_the_last_target_change():
         "target_upper": 4.0,
         "effr": 3.88,
         "effr_date": "2026-10-01",
-        "last_change": {"date": "2026-09-17", "from": [3.5, 3.75], "to": [3.75, 4.0]},
+        "last_change": {"effective": "2026-09-17", "from": [3.5, 3.75], "to": [3.75, 4.0], "change_bp": 25},
     }
 
 

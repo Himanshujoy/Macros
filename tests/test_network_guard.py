@@ -9,9 +9,15 @@ def test_the_guard_blocks_connections_outside_localhost():
         sock.connect(("192.0.2.1", 80))  # TEST-NET-1: a reserved address that is never a real host
 
 
+def test_the_guard_blocks_name_lookups():
+    with pytest.raises(RuntimeError, match="look up"):
+        socket.getaddrinfo("example.invalid", 443)
+
+
 def test_the_guard_allows_localhost():
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
         with socket.socket() as client:
             client.connect(server.getsockname())
+    assert socket.getaddrinfo("localhost", 80)

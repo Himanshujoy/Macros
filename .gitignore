@@ -2,7 +2,9 @@
 .venv/
 dist/
 dist.tmp/
+dist.old/
 work/
 .cache/
 __pycache__/
 .pytest_cache/
+.DS_Store

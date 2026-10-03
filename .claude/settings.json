@@ -99,7 +99,21 @@
       "Bash(.venv/bin/python - macro/snapshot.py macro/build.py)",
       "Bash(.venv/bin/python - tests/test_cli.py)",
       "Bash(.venv/bin/python -m pytest tests/test_cli.py)",
-      "Bash(.venv/bin/python - macro/cli.py macro/__main__.py)"
+      "Bash(.venv/bin/python - macro/cli.py macro/__main__.py)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m pytest tests/test_odds.py tests/test_facts.py tests/test_build.py)",
+      "Bash(.venv/bin/python - tests/conftest.py tests/test_network_guard.py tests/test_dates.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_dates.py tests/test_network_guard.py)",
+      "Bash(.venv/bin/python - macro/errors.py macro/dates.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_dates.py tests/test_network_guard.py -v)",
+      "Bash(.venv/bin/python - tests/samples.py tests/test_treasury.py tests/test_nyfed.py tests/test_futures.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_treasury.py tests/test_nyfed.py tests/test_futures.py -v)",
+      "Bash(.venv/bin/python - macro/sources/treasury.py macro/sources/nyfed.py macro/sources/futures.py)",
+      "Bash(.venv/bin/python - tests/test_fedwatch.py tests/test_odds.py tests/test_facts.py tests/test_build.py tests/test_cli.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_fedwatch.py tests/test_odds.py tests/test_facts.py tests/test_build.py tests/test_cli.py -v)",
+      "Bash(.venv/bin/python - macro/fedwatch.py macro/odds.py macro/facts.py macro/build.py macro/cli.py .gitignore)",
+      "Bash(.venv/bin/python -m pytest tests/test_fedwatch.py tests/test_odds.py tests/test_facts.py tests/test_build.py tests/test_cli.py)",
+      "Bash(.venv/bin/python -m pytest -q)"
     ]
   }
 }

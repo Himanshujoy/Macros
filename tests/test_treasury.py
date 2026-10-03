@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import httpx
@@ -5,7 +6,7 @@ import pytest
 
 from macro.errors import SourceError
 from macro.sources import treasury
-from samples import CSV_1990, CSV_2025_GAP, CSV_2026, treasury_csv_for
+from samples import CSV_1990, CSV_2025_GAP, CSV_2026, OLD_HEADER, treasury_csv_for
 
 
 def test_parse_tenor_labels_and_years():
@@ -47,6 +48,18 @@ def test_parse_year_rejects_a_page_that_is_not_the_csv():
         treasury.parse_year_csv("<html>Access denied</html>")
 
 
+@pytest.mark.parametrize("cell", ["nan", "inf", "404", "-9", "abc"])
+def test_an_implausible_yield_is_a_source_error(cell):
+    text = f"{OLD_HEADER}\n12/31/1990,{cell},6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26"
+    with pytest.raises(SourceError):
+        treasury.parse_year_csv(text)
+
+
+def test_a_row_of_the_wrong_width_is_a_source_error():
+    with pytest.raises(SourceError, match="cells"):
+        treasury.parse_year_csv(f"{OLD_HEADER}\n12/31/1990,6.63,6.73")
+
+
 def test_build_table_merges_years_oldest_first_and_fills_gaps():
     table = treasury.build_table([treasury.parse_year_csv(CSV_2026), treasury.parse_year_csv(CSV_1990)])
     assert table.dates[0] == date(1990, 12, 31)
@@ -56,50 +69,79 @@ def test_build_table_merges_years_oldest_first_and_fills_gaps():
     assert table.values["10Y"] == [8.08, 5.29, 5.24, 5.28]
 
 
-def make_client(handler):
-    return httpx.Client(transport=httpx.MockTransport(handler))
-
-
 def year_of(request):
     return int(request.url.params["field_tdr_date_value"])
 
 
+class Recorder:
+    """A fake Treasury site that remembers which years were asked for."""
+
+    def __init__(self, reply=treasury_csv_for):
+        self.seen = []
+        self.reply = reply
+
+    def __call__(self, request):
+        self.seen.append(year_of(request))
+        return httpx.Response(200, text=self.reply(year_of(request)))
+
+    def load(self, cache_dir, today):
+        self.seen.clear()
+        with httpx.Client(transport=httpx.MockTransport(self)) as client:
+            return treasury.load(client, cache_dir, today)
+
+
 def test_load_caches_past_years_and_refetches_the_current_year(tmp_path):
-    seen = []
-
-    def handler(request):
-        seen.append(year_of(request))
-        return httpx.Response(200, text=treasury_csv_for(year_of(request)))
-
-    with make_client(handler) as client:
-        treasury.load(client, tmp_path, date(2026, 10, 3))
-        assert seen == list(range(1990, 2027))
-        seen.clear()
-        table = treasury.load(client, tmp_path, date(2026, 10, 3))
-    assert seen == [2026]
+    site = Recorder()
+    site.load(tmp_path, date(2026, 10, 3))
+    assert site.seen == list(range(1990, 2027))
+    table = site.load(tmp_path, date(2026, 10, 3))
+    assert site.seen == [2026]
     assert table.dates[-1] == date(2026, 10, 2)
 
 
-def test_load_refetches_the_previous_year_in_january(tmp_path):
-    seen = []
+def test_a_year_fetched_before_it_ended_is_fetched_again_however_late(tmp_path):
+    site = Recorder()
+    site.load(tmp_path, date(2026, 12, 20))
+    site.load(tmp_path, date(2027, 2, 3))  # no refresh in between: 2026 was last saved on 20 December
+    assert site.seen == [2026, 2027]
+    site.load(tmp_path, date(2027, 2, 4))  # now 2026 was saved after it ended, so it is final
+    assert site.seen == [2027]
 
-    def handler(request):
-        seen.append(year_of(request))
-        return httpx.Response(200, text=treasury_csv_for(year_of(request)))
 
-    with make_client(handler) as client:
-        treasury.load(client, tmp_path, date(2026, 10, 3))
-        seen.clear()
-        treasury.load(client, tmp_path, date(2027, 1, 5))
-    assert seen == [2026, 2027]
+def test_a_damaged_cache_file_is_fetched_again(tmp_path):
+    site = Recorder()
+    site.load(tmp_path, date(2026, 10, 3))
+    (tmp_path / "2001.csv").write_text("<html>half a page")
+    site.load(tmp_path, date(2026, 10, 3))
+    assert site.seen == [2001, 2026]
+    assert (tmp_path / "2001.csv").read_text() == treasury_csv_for(2001)
+
+
+def test_a_missing_or_broken_index_means_fetch_everything_again(tmp_path):
+    site = Recorder()
+    site.load(tmp_path, date(2026, 10, 3))
+    (tmp_path / "saved.json").write_text("not json")
+    site.load(tmp_path, date(2026, 10, 3))
+    assert site.seen == list(range(1990, 2027))
+    assert json.loads((tmp_path / "saved.json").read_text())["2025"] == "2026-10-03"
+
+
+def test_an_empty_file_for_the_new_year_is_not_an_error(tmp_path):
+    site = Recorder(lambda year: "" if year == 2027 else treasury_csv_for(year))
+    table = site.load(tmp_path, date(2027, 1, 2))
+    assert table.dates[-1] == date(2026, 10, 2)
+
+
+def test_an_empty_file_for_a_past_year_is_an_error(tmp_path):
+    site = Recorder(lambda year: "" if year == 2005 else treasury_csv_for(year))
+    with pytest.raises(SourceError):
+        site.load(tmp_path, date(2026, 10, 3))
 
 
 def test_a_bad_download_stops_the_load_and_is_not_cached(tmp_path):
-    def handler(request):
-        return httpx.Response(200, text="<html>Access denied</html>")
-
-    with make_client(handler) as client, pytest.raises(SourceError):
-        treasury.load(client, tmp_path, date(2026, 10, 3))
+    site = Recorder(lambda year: "<html>Access denied</html>")
+    with pytest.raises(SourceError):
+        site.load(tmp_path, date(2026, 10, 3))
     assert list(tmp_path.iterdir()) == []
 
 
@@ -107,5 +149,5 @@ def test_a_failed_request_is_reported_as_a_source_error(tmp_path):
     def handler(request):
         return httpx.Response(503)
 
-    with make_client(handler) as client, pytest.raises(SourceError, match="1990"):
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(SourceError, match="1990"):
         treasury.load(client, tmp_path, date(2026, 10, 3))

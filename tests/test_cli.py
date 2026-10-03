@@ -71,6 +71,7 @@ def test_summary_lines_name_the_headline_numbers(paths):
     text = "\n".join(cli.summary_lines(run(paths)))
     assert "20261003T181500Z" in text
     assert "10Y 5.28" in text
+    assert "current range 3.75-4.00" in text
     assert "hold 77.9" in text
     assert "hike 22.1" in text
 
@@ -117,3 +118,43 @@ def test_main_prints_the_summary_and_returns_0(paths, monkeypatch, capsys):
     monkeypatch.setattr(cli, "utc_now", lambda: NOW)
     assert cli.main(["refresh"]) == 0
     assert "hold 77.9" in capsys.readouterr().out
+
+
+def patch_main(monkeypatch, paths, transport_handler=handler):
+    monkeypatch.setattr(cli, "make_client", lambda: client_with(transport_handler))
+    monkeypatch.setattr(cli, "default_paths", lambda: paths)
+    monkeypatch.setattr(cli, "utc_now", lambda: NOW)
+
+
+def test_a_problem_found_after_fetching_is_reported_plainly_and_leaves_dist_alone(paths, monkeypatch, capsys):
+    run(paths)
+    before = (paths["dist"] / "data.json").read_bytes()
+    paths["site"].mkdir()
+    (paths["site"] / "notes.docx").write_text("a file type the server does not serve")
+    patch_main(monkeypatch, paths)
+    assert cli.main(["refresh"]) == 1
+    assert "no content type for notes.docx" in capsys.readouterr().err
+    assert (paths["dist"] / "data.json").read_bytes() == before
+
+
+def test_an_unexpected_error_is_reported_in_one_line(paths, monkeypatch, capsys):
+    def explode(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    patch_main(monkeypatch, paths)
+    monkeypatch.setattr(cli, "refresh", explode)
+    assert cli.main(["refresh"]) == 1
+    err = capsys.readouterr().err
+    assert "unexpected error: RuntimeError: boom" in err
+    assert "--debug" in err
+    assert "Traceback" not in err
+
+
+def test_debug_lets_the_full_error_through(paths, monkeypatch):
+    def explode(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    patch_main(monkeypatch, paths)
+    monkeypatch.setattr(cli, "refresh", explode)
+    with pytest.raises(RuntimeError, match="boom"):
+        cli.main(["refresh", "--debug"])

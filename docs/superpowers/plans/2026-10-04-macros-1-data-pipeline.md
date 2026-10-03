@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-04-macros-page-design.md`. This plan covers sections 6.1 to 6.4, the facts part of 6.5, and the `refresh` command of 7.1.
 
+> **Superseded in part.** An independent review after this plan was executed found defects. `2026-10-04-macros-1b-review-fixes.md` replaces 23 of the files below in full. For those files, the content in that plan is the current one.
+
 ---
 
 ## Roadmap

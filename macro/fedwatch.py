@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import calendar
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import date, timedelta
 
-Month = tuple[int, int]
+from macro.dates import Month, add_months
+
 STEP = 0.25
 
 
@@ -19,11 +20,6 @@ class FedWatchError(Exception):
 
 class MissingPrice(FedWatchError):
     """A price or rate the calculation needs is not available."""
-
-
-def add_months(month: Month, count: int) -> Month:
-    index = month[0] * 12 + (month[1] - 1) + count
-    return (index // 12, index % 12 + 1)
 
 
 def days_in(month: Month) -> int:
@@ -93,15 +89,21 @@ def combine(first: dict[int, float], second: dict[int, float]) -> dict[int, floa
 
 def distribution(
     pricing_date: date,
-    target_end: date,
+    pending: Collection[date],
     meeting_ends: list[date],
     prices: dict[Month, dict[date, float]],
     rates: dict[date, float],
+    decided: Collection[date] = (),
 ) -> dict[int, float]:
-    """Probability of each total number of 25 bp moves from the pricing date to the target meeting.
+    """Probability of each total number of 25 bp moves over the `pending` meetings.
 
-    `prices` maps a contract month to its closing price by day. `rates` is EFFR by day.
+    `pending` are the end dates of the meetings to count, as priced on `pricing_date`.
+    `decided` are those among them whose outcome the prices already reflect: each counts as
+    its nearest whole number of moves, with certainty. `meeting_ends` is the whole calendar,
+    `prices` maps a contract month to its closing price by day, and `rates` is EFFR by day.
     """
+    if not pending:
+        raise FedWatchError("no meeting to price")
     meeting_months = {(day.year, day.month) for day in meeting_ends}
     pricing_month = (pricing_date.year, pricing_date.month)
 
@@ -113,11 +115,11 @@ def distribution(
         except KeyError:
             raise MissingPrice(f"no price for {month} on {pricing_date}") from None
 
-    pending = sorted(day for day in meeting_ends if pricing_date < day <= target_end)
-    if not pending:
-        raise FedWatchError("no meeting between the pricing date and the target")
     total = {0: 1.0}
-    for meeting_end in pending:
+    for meeting_end in sorted(pending):
+        if (meeting_end.year, meeting_end.month) < pricing_month:
+            raise FedWatchError(f"the rate table has not caught up with the {meeting_end} meeting")
         moves = expected_moves(meeting_end, implied, lambda month: month in meeting_months)
-        total = combine(total, split(moves))
+        shares = {round(moves): 1.0} if meeting_end in decided else split(moves)
+        total = combine(total, shares)
     return total

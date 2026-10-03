@@ -4,6 +4,7 @@ import json
 import pytest
 
 from macro.build import build_dist, write_manifest
+from macro.errors import BuildError
 
 SNAPSHOT = {"snapshot_id": "20261003T181500Z", "value": 1}
 
@@ -58,16 +59,39 @@ def test_a_rebuild_replaces_the_old_dist(tmp_path):
 def test_a_failed_build_leaves_the_old_dist_alone(tmp_path):
     dist = tmp_path / "dist"
     build_dist(dist, tmp_path / "no-site", SNAPSHOT)
-    with pytest.raises(ValueError):
+    with pytest.raises(BuildError, match="JSON"):
         build_dist(dist, tmp_path / "no-site", {**SNAPSHOT, "value": float("nan")})
     assert json.loads((dist / "data.json").read_text()) == SNAPSHOT
+
+
+def test_a_swap_that_fails_puts_the_old_dist_back(tmp_path, monkeypatch):
+    dist = tmp_path / "dist"
+    build_dist(dist, tmp_path / "no-site", SNAPSHOT)
+    real_rename = type(dist).rename
+
+    def failing_rename(self, target):
+        if self.name == "dist.tmp":
+            raise OSError("disk full")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(type(dist), "rename", failing_rename)
+    with pytest.raises(OSError, match="disk full"):
+        build_dist(dist, tmp_path / "no-site", {**SNAPSHOT, "value": 2})
+    assert json.loads((dist / "data.json").read_text()) == SNAPSHOT
+
+
+def test_nothing_is_left_behind_after_a_build(tmp_path):
+    dist = tmp_path / "dist"
+    build_dist(dist, tmp_path / "no-site", SNAPSHOT)
+    build_dist(dist, tmp_path / "no-site", {**SNAPSHOT, "value": 2})
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["dist"]
 
 
 def test_a_file_with_an_unknown_type_stops_the_build(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
     (site / "notes.docx").write_text("x")
-    with pytest.raises(ValueError, match="notes.docx"):
+    with pytest.raises(BuildError, match="notes.docx"):
         build_dist(tmp_path / "dist", site, SNAPSHOT)
 
 

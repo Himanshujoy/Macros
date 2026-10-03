@@ -201,7 +201,7 @@ The page reads one file, `data.json`, so everything a visitor sees comes from th
 | `yields.as_of` | Last date with data |
 | `fed_funds.dates`, `.effr`, `.target_lower`, `.target_upper`, `.as_of` | Aligned arrays. Before 16 December 2008, lower and upper are equal |
 | `fomc.meetings` | Future meetings as `{end, statement_at}`, with `statement_at` in UTC |
-| `odds.meeting`, `.priced_on`, `.current_range` | The meeting the odds refer to, the last futures price date, and the target range on that date |
+| `odds.meeting`, `.priced_on`, `.current_range` | The meeting the odds refer to, the futures price date used for "now", and the target range in force then, counting any decision the published rate table has not caught up with |
 | `odds.columns` | The four comparison dates: now, 1 day, 1 week, 1 month |
 | `odds.outcomes` | One entry per target range with a probability for each column, or `null` |
 | `odds.summary` | Cut, hold and hike percentages for "now" |
@@ -230,13 +230,20 @@ Then:
 
 - The expected number of 25 bp moves at that meeting is `x = (end - start) / 0.25`.
 - With `k = floor(x)` and `f = x - k`, the meeting has probability `1 - f` of `k` moves and `f` of `k + 1` moves. This works for cuts as well, where `x` is negative.
-- When an earlier meeting lies between the pricing date and the target meeting, the two meetings' move distributions are combined by convolution.
-- Moves are counted from the target range in force on the pricing date. Each total maps to a target range.
-- "Hold" is the probability of zero moves in total, "cut" is the sum below and "hike" is the sum above.
+- The move distributions of several meetings are combined by convolution.
+
+Which meeting, and which meetings are counted:
+
+- **Target.** The odds are for the next meeting whose statement is still ahead, the same rule the countdown uses.
+- **Base range.** It comes from the latest New York Fed row on or before the pricing date. A row carries the range in force that day, and a decision takes effect the day after the meeting ends. So the row dated on a meeting day still shows the old range, and the table can be a day behind prices.
+- **Counted meetings.** Every meeting ending on or after that row's date, up to the target, is counted. Each total number of moves maps to a target range above or below the base range.
+- **Decided meetings.** A counted meeting whose outcome the prices already reflect counts as its nearest whole number of moves, with certainty. For a comparison date that is a meeting ending on or before that date. For "now" it is a meeting whose statement time has passed. If the latest prices are older than such a decision, the refresh stops and says to try later.
+- **Current range.** The base range plus the decided moves. "Hold" is the probability of ending in the current range, "cut" is the sum below it and "hike" is the sum above.
+- **Stale table.** If the rate table is more than five days behind the pricing date, the refresh stops.
 
 The method splits each meeting between two neighbouring outcomes. So when a hike is priced, a cut shows 0%, as it does on CME's page.
 
-The four comparison columns use these pricing dates: `Now` is the latest date with prices, `1 day` is the price date before it, and `1 week` and `1 month` are the latest price dates on or before 7 days and one calendar month earlier.
+The four comparison columns use these pricing dates: `Now` is the latest date on which every contract the calculation needs has a price, looking back at most three price days; `1 day` is the price date before it, and `1 week` and `1 month` are the latest price dates on or before 7 days and one calendar month earlier.
 
 **Check values.** These prices were fetched on 2026-10-03 and become test fixtures. CME's figures are from the owner's screenshot of the same day, for the 28 October 2026 meeting.
 
@@ -348,7 +355,7 @@ Each module has one job and can be tested alone. The source modules return plain
 
 There are no secrets in this version. `.gitignore` covers `.env`, `.venv/`, `dist/`, `work/`, `.cache/` and `__pycache__/`.
 
-Past years of Treasury data are cached under `.cache/`. A refresh re-downloads only the current year, and the previous year during January.
+Treasury data is cached under `.cache/`, one file per year, with an index of the day each file was fetched. A past year comes from the cache only if its file was fetched after that year ended and still parses. The current year is always fetched, and so is a past year last fetched before it ended.
 
 ### 7.4 Publish
 
@@ -548,6 +555,8 @@ Rules for every box step:
 | Failure | Behaviour |
 |---|---|
 | Any data source fails or returns something unexpected during refresh | Refresh stops with a clear message. `dist/` is not replaced. The live page keeps its last snapshot |
+| A value is outside sane bounds: a yield, a rate or a futures price | Treated as a source failure, as above |
+| Anything else goes wrong during refresh | One line naming the error. `refresh --debug` shows the full error |
 | The analysis file is missing or fails its checks | The analysis command stops and says why. The snapshot has no analysis, so publish refuses unless `--without-analysis` is given. The page then shows the button disabled |
 | The upload fails partway | `current` has not switched, so the old release stays live. The leftover `.tmp` folder is removed on the next publish |
 | `macro-web` crashes | systemd restarts it after 5 seconds. After five crashes in 10 seconds it stays stopped and visitors see a Cloudflare error page |

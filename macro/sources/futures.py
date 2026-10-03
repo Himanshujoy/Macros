@@ -1,16 +1,17 @@
 """Closing prices of 30-Day Federal Funds futures, from Yahoo's chart endpoint."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
+from macro.dates import Month
 from macro.errors import SourceError
 
 MONTH_CODES = "FGHJKMNQUVXZ"
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-
-Month = tuple[int, int]
+PRICE_BOUNDS = (80.0, 101.0)  # an implied rate between -1% and 20%
 
 
 def symbol(month: Month) -> str:
@@ -19,20 +20,28 @@ def symbol(month: Month) -> str:
 
 
 def parse_chart(payload: object) -> dict[date, float]:
-    """Closing price by trading day. Timestamps are shifted to the exchange's own clock first."""
+    """Closing price by trading day.
+
+    Each bar is dated on the exchange's own clock, bar by bar, so a reply that spans a
+    daylight-saving change is still dated correctly.
+    """
     try:
         result = payload["chart"]["result"][0]
-        offset = result["meta"]["gmtoffset"]
+        zone = ZoneInfo(result["meta"]["exchangeTimezoneName"])
         stamps = result["timestamp"]
         closes = result["indicators"]["quote"][0]["close"]
-    except (KeyError, IndexError, TypeError):
+        prices: dict[date, float] = {}
+        for stamp, close in zip(stamps, closes, strict=True):
+            if close is None:
+                continue
+            price = round(float(close), 4)
+            if not PRICE_BOUNDS[0] < price < PRICE_BOUNDS[1]:
+                raise SourceError(f"Yahoo: implausible futures price {close!r}")
+            prices[datetime.fromtimestamp(stamp, zone).date()] = price
+    except SourceError:
+        raise
+    except (KeyError, IndexError, TypeError, ValueError):
         raise SourceError("Yahoo: unexpected reply") from None
-    prices: dict[date, float] = {}
-    for stamp, close in zip(stamps, closes):
-        if close is None:
-            continue
-        day = datetime.fromtimestamp(stamp + offset, timezone.utc).date()
-        prices[day] = round(float(close), 4)
     return prices
 
 
