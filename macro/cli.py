@@ -18,6 +18,7 @@ from macro.fedwatch import FedWatchError
 from macro.odds import build_odds
 from macro.snapshot import build_snapshot
 from macro.sources import fomc, futures, nyfed, treasury
+from server import serve
 
 CONTRACT_SHIFTS = (-2, -1, 0, 1)  # months around the meeting month whose contracts are fetched
 
@@ -106,7 +107,20 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     refresh_parser = commands.add_parser("refresh", help="fetch the data, calculate, and build dist/")
     refresh_parser.add_argument("--debug", action="store_true", help="show the full error instead of a one-line message")
+    preview_parser = commands.add_parser("preview", help="serve dist/ on this Mac, to look at it before publishing")
+    preview_parser.add_argument("--port", type=int, default=serve.DEFAULT_PORT, help="port on 127.0.0.1")
     args = parser.parse_args(argv)
+
+    if args.command == "preview":
+        dist = default_paths()["dist"]
+        if not (dist / "manifest.json").is_file():
+            print("Nothing to preview. Run `python -m macro refresh` first.", file=sys.stderr)
+            return 1
+        try:
+            return serve.run(dist, args.port)
+        except OSError as exc:
+            print(f"Preview cannot use port {args.port}: {exc}. Try --port with another number.", file=sys.stderr)
+            return 1
 
     if args.command == "refresh":
         try:

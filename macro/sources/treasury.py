@@ -20,6 +20,8 @@ YEAR_URL = (
     "?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv"
 )
 INDEX_NAME = "saved.json"  # for each cached year, the day its file was fetched
+FINAL_FROM = "-01-08"  # a past year is final once fetched on or after 8 January of the next year
+NEW_YEAR_GRACE_DAYS = 7  # how far into January the new year's file may still have no rows
 YIELD_BOUNDS = (-5.0, 30.0)
 _HEADER = re.compile(r"^(\d+(?:\.\d+)?) (Mo|Month|Yr)$")
 
@@ -127,21 +129,26 @@ def _write(path: Path, text: str) -> None:
 
 
 def _cached_year(cache_dir: Path, index: dict[str, str], year: int) -> ParsedYear | None:
-    """A cached year, but only if its file was fetched after that year ended and still parses."""
+    """A cached year, but only if its file was fetched once the year was over and still has rows.
+
+    The Treasury can post a year's last rows a few days late, so "over" means 8 January.
+    """
     saved = index.get(str(year))
-    if not isinstance(saved, str) or saved <= f"{year}-12-31":
+    if not isinstance(saved, str) or saved < f"{year + 1}{FINAL_FROM}":
         return None
     try:
-        return parse_year_csv((cache_dir / f"{year}.csv").read_text(encoding="utf-8"))
+        result = parse_year_csv((cache_dir / f"{year}.csv").read_text(encoding="utf-8"))
     except (OSError, SourceError):
         return None
+    return result if result[1] else None
 
 
 def load(client: httpx.Client, cache_dir: Path, today: date) -> YieldTable:
     """Every year from 1990.
 
-    A year comes from the cache only if its file was fetched after the year ended. The current
-    year, and a past year last fetched before it ended, are fetched again.
+    A year comes from the cache only if its file was fetched once that year was over. The
+    current year, and a past year last fetched before then, are fetched again. A file with
+    no rows is never cached, except the new year's file in the first days of January.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     index = _read_index(cache_dir)
@@ -150,14 +157,18 @@ def load(client: httpx.Client, cache_dir: Path, today: date) -> YieldTable:
         result = _cached_year(cache_dir, index, year) if year < today.year else None
         if result is None:
             text = fetch_year(client, year)
-            if year == today.year and not text.strip():
+            new_year = year == today.year and today.month == 1 and today.day <= NEW_YEAR_GRACE_DAYS
+            if not text.strip():
+                if not new_year:
+                    raise SourceError(f"Treasury: the {year} file is empty")
                 result = ([], [])  # the new year's file can be empty until its first trading day
             else:
-                result = parse_year_csv(text)  # parse before caching, so a bad file is never cached
+                result = parse_year_csv(text)
+            if not result[1] and not new_year:
+                raise SourceError(f"Treasury: {year} has no rows")
+            # Only a file that parsed and has rows gets this far, so a bad one is never cached.
             _write(cache_dir / f"{year}.csv", text)
             index[str(year)] = today.isoformat()
             _write(cache_dir / INDEX_NAME, json.dumps(index, indent=0, sort_keys=True) + "\n")
-        if not result[1] and year < today.year:
-            raise SourceError(f"Treasury: {year} has no rows")
         parsed.append(result)
     return build_table(parsed)

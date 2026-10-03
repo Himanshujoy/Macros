@@ -40,7 +40,7 @@ def parse_chart(payload: object) -> dict[date, float]:
             prices[datetime.fromtimestamp(stamp, zone).date()] = price
     except SourceError:
         raise
-    except (KeyError, IndexError, TypeError, ValueError):
+    except (KeyError, IndexError, TypeError, ValueError, OverflowError, OSError):
         raise SourceError("Yahoo: unexpected reply") from None
     return prices
 

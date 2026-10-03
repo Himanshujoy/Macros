@@ -102,3 +102,10 @@ def test_a_server_error_is_a_source_error():
 
     with client_for(handler) as client, pytest.raises(SourceError, match="ZQV26"):
         futures.load(client, [(2026, 10)])
+
+
+def test_an_absurd_timestamp_is_a_source_error():
+    payload = chart_payload({date(2026, 10, 2): 96.12})
+    payload["chart"]["result"][0]["timestamp"] = [10**20]
+    with pytest.raises(SourceError):
+        futures.parse_chart(payload)

@@ -65,8 +65,10 @@ def parse(payload: object) -> FedFundsTable:
     for row in rows:
         try:
             point = _point(row)
-        except (AttributeError, KeyError, TypeError, ValueError):
-            raise SourceError("New York Fed: unexpected row in the reply") from None
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            label = row.get("effectiveDate") if isinstance(row, dict) else None
+            where = f" dated {label}" if isinstance(label, str) else ""
+            raise SourceError(f"New York Fed: unexpected row in the reply{where}: {type(exc).__name__}") from None
         if point is not None:
             points.append(point)
     if not points:

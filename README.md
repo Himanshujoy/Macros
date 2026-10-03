@@ -9,7 +9,7 @@ A one-page view of US macro data, served at `https://macros.theta-markets.com/`.
 
 ## Status
 
-As of 2026-10-04 the data pipeline works: `python -m macro refresh` fetches the data, calculates the rate odds and writes `dist/data.json`. The page, the analysis PDF and publishing are not built yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
+As of 2026-10-04 the data pipeline and the web server work: `python -m macro refresh` builds `dist/`, and `python -m macro preview` serves it locally. The page is still a placeholder that prints one line of data. The charts, the analysis PDF and publishing are not built yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
 
 ## How it works
 
@@ -38,7 +38,7 @@ Each command arrives with the plan that builds it. Run them with the project's i
 | Command | What it does | Status |
 |---|---|---|
 | `python -m macro refresh` | Fetches the data, calculates, and builds `dist/`. Add `--debug` to see a full error | Works |
-| `python -m macro preview` | Serves `dist/` locally | Plan 2 |
+| `python -m macro preview` | Serves `dist/` at `http://127.0.0.1:8081/` with the server the box will run. `--port` picks another port | Works, with a placeholder page |
 | `python -m macro analysis` | Turns an analysis file into the PDF | Plan 3 |
 | `python -m macro publish` | Uploads `dist/` to the server and switches to it | Plan 4 |
 | `python -m macro rollback` | Switches the server back to the previous snapshot | Plan 4 |

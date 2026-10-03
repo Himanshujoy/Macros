@@ -151,3 +151,40 @@ def test_a_failed_request_is_reported_as_a_source_error(tmp_path):
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(SourceError, match="1990"):
         treasury.load(client, tmp_path, date(2026, 10, 3))
+
+
+def test_an_empty_file_for_the_current_year_later_in_the_year_is_an_error_and_keeps_the_cache(tmp_path):
+    site = Recorder()
+    site.load(tmp_path, date(2026, 10, 3))
+    emptied = Recorder(lambda year: "" if year == 2026 else treasury_csv_for(year))
+    with pytest.raises(SourceError, match="2026 file is empty"):
+        emptied.load(tmp_path, date(2026, 10, 4))
+    assert (tmp_path / "2026.csv").read_text() == CSV_2026
+
+
+def test_a_header_with_no_rows_is_accepted_only_in_the_first_week_of_january(tmp_path):
+    site = Recorder(lambda year: OLD_HEADER if year == 2027 else treasury_csv_for(year))
+    assert site.load(tmp_path, date(2027, 1, 7)).dates[-1] == date(2026, 10, 2)
+    with pytest.raises(SourceError, match="2027 has no rows"):
+        site.load(tmp_path, date(2027, 1, 8))
+
+
+def test_a_past_year_with_no_rows_is_not_cached_so_the_next_run_asks_again(tmp_path):
+    site = Recorder(lambda year: OLD_HEADER if year == 1997 else treasury_csv_for(year))
+    with pytest.raises(SourceError, match="1997 has no rows"):
+        site.load(tmp_path, date(2026, 10, 3))
+    assert not (tmp_path / "1997.csv").exists()
+    with pytest.raises(SourceError, match="1997 has no rows"):
+        site.load(tmp_path, date(2026, 10, 3))
+    assert site.seen == [1997]
+
+
+def test_a_year_is_final_only_once_fetched_on_or_after_8_january(tmp_path):
+    site = Recorder()
+    site.load(tmp_path, date(2027, 1, 3))  # the Treasury may not have posted 31 December yet
+    site.load(tmp_path, date(2027, 1, 7))
+    assert site.seen == [2026, 2027]
+    site.load(tmp_path, date(2027, 1, 8))
+    assert site.seen == [2026, 2027]
+    site.load(tmp_path, date(2027, 1, 9))  # 2026 was saved on the 8th, so now it is final
+    assert site.seen == [2027]

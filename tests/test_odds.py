@@ -167,3 +167,30 @@ def test_a_rate_table_far_behind_the_prices_stops_the_build():
 def test_no_meeting_ahead_stops_the_build():
     with pytest.raises(SourceError, match="no future meeting"):
         build_odds(at(2027, 6, 1), MEETINGS, PRICES, FED)
+
+
+def test_just_after_a_statement_the_build_waits_for_prices_to_settle():
+    fed = table_until(date(2026, 10, 27))
+    prices = on(date(2026, 10, 28), date(2026, 10, 2))
+    just_after = datetime(2026, 10, 28, 18, 5, tzinfo=timezone.utc)
+    with pytest.raises(SourceError, match="Refresh after 18:30 UTC"):
+        build_odds(just_after, MEETINGS, prices, fed)
+
+
+def test_prices_that_do_not_show_a_clear_decision_stop_the_build():
+    # An hour after the statement the only bar still holds the morning's prices: 0.22 of a move
+    # would round to "no change", but 0.45 is not a decision at all.
+    fed = table_until(date(2026, 10, 27))
+    prices = on(date(2026, 10, 28), date(2026, 10, 2), m11=96.0143)
+    with pytest.raises(SourceError, match="clear outcome"):
+        build_odds(at(2026, 10, 28, hour=19), MEETINGS, prices, fed)
+
+
+def test_a_decided_cut_lowers_the_current_range():
+    # 28 October, an hour after a 25 bp cut: October averages 28 days at 3.88 and 3 at 3.63.
+    fed = table_until(date(2026, 10, 27))
+    prices = on(date(2026, 10, 28), date(2026, 10, 2), m10=96.1442, m11=96.37, m12=96.40)
+    odds = build_odds(at(2026, 10, 28, hour=19), MEETINGS, prices, fed)
+    assert odds["current_range"] == [3.5, 3.75]
+    assert [(row["range"], row["now"]) for row in odds["outcomes"]] == [([3.25, 3.5], 16.9), ([3.5, 3.75], 83.1)]
+    assert odds["summary"] == {"cut": 16.9, "hold": 83.1, "hike": 0.0}

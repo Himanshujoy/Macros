@@ -124,3 +124,9 @@ def test_no_meeting_to_price_is_an_error():
 def test_a_pending_meeting_in_a_finished_month_is_an_error():
     with pytest.raises(fedwatch.FedWatchError, match="not caught up"):
         priced(date(2026, 10, 2), [SEPTEMBER, OCTOBER])
+
+
+def test_a_decided_meeting_without_a_clear_outcome_in_the_prices_is_a_missing_price():
+    # Priced on 3 September the market gave 0.47 of a move: nowhere near a decision.
+    with pytest.raises(fedwatch.MissingPrice, match="clear outcome"):
+        priced(date(2026, 9, 3), [SEPTEMBER, OCTOBER], decided=[SEPTEMBER])

@@ -103,3 +103,25 @@ def test_write_manifest_can_be_rerun_after_adding_a_file(tmp_path):
     files = json.loads((dist / "manifest.json").read_text())["files"]
     assert sorted(files) == ["analysis.pdf", "data.json"]
     assert files["analysis.pdf"]["content_type"] == "application/pdf"
+
+
+def test_an_old_dist_stranded_by_an_interrupted_run_is_put_back_first(tmp_path):
+    dist = tmp_path / "dist"
+    build_dist(dist, tmp_path / "no-site", SNAPSHOT)
+    dist.rename(tmp_path / "dist.old")  # as if a run had stopped between its two renames
+    with pytest.raises(BuildError):
+        build_dist(dist, tmp_path / "no-site", {**SNAPSHOT, "value": float("nan")})
+    assert json.loads((dist / "data.json").read_text()) == SNAPSHOT
+
+
+def test_the_page_gets_the_build_id_in_its_asset_addresses(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text('<script src="app.js?v={{BUILD_ID}}"></script>')
+    (site / "app.js").write_text("// {{BUILD_ID}} is left alone outside the page")
+    dist = tmp_path / "dist"
+    build_dist(dist, site, {**SNAPSHOT, "build_id": "B7"})
+    assert (dist / "index.html").read_text() == '<script src="app.js?v=B7"></script>'
+    assert "{{BUILD_ID}}" in (dist / "app.js").read_text()
+    listed = json.loads((dist / "manifest.json").read_text())["files"]["index.html"]["sha256"]
+    assert listed == sha(dist / "index.html")

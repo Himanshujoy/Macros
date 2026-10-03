@@ -113,7 +113,30 @@
       "Bash(.venv/bin/python -m pytest tests/test_fedwatch.py tests/test_odds.py tests/test_facts.py tests/test_build.py tests/test_cli.py -v)",
       "Bash(.venv/bin/python - macro/fedwatch.py macro/odds.py macro/facts.py macro/build.py macro/cli.py .gitignore)",
       "Bash(.venv/bin/python -m pytest tests/test_fedwatch.py tests/test_odds.py tests/test_facts.py tests/test_build.py tests/test_cli.py)",
-      "Bash(.venv/bin/python -m pytest -q)"
+      "Bash(.venv/bin/python -m pytest -q)",
+      "Bash(sed -e 's/\\(.*//')",
+      "Bash(git --no-pager diff HEAD -- macro/sources/treasury.py macro/odds.py macro/fedwatch.py)",
+      "Bash(git --no-pager log --oneline -6)",
+      "Bash(git --no-pager diff HEAD~1 --stat -- macro/ tests/)",
+      "Bash(git --no-pager diff HEAD~1 HEAD -- macro/sources/treasury.py)",
+      "Bash(git --no-pager show HEAD~1:macro/odds.py)",
+      "Bash(git --no-pager diff HEAD~1 HEAD -- macro/fedwatch.py)",
+      "Bash(grep -n 'BUILD_ID}}`\\\\|http_code\\\\|cache=\\\\[' docs/superpowers/plans/2026-10-04-macros-2a-server-and-preview.md)",
+      "Bash(.venv/bin/python - tests/test_treasury.py tests/test_fedwatch.py tests/test_odds.py tests/test_futures.py tests/test_nyfed.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_treasury.py tests/test_fedwatch.py tests/test_odds.py tests/test_futures.py tests/test_nyfed.py -v)",
+      "Bash(.venv/bin/python - macro/sources/treasury.py macro/fedwatch.py macro/odds.py macro/sources/futures.py macro/sources/nyfed.py)",
+      "Bash(.venv/bin/python - tests/test_serve.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_serve.py)",
+      "Bash(.venv/bin/python - server/__init__.py server/serve.py)",
+      "Bash(.venv/bin/python server/serve.py --self-test)",
+      "Bash(.venv/bin/python - tests/test_build.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_build.py -v)",
+      "Bash(.venv/bin/python - macro/build.py site/index.html site/app.js site/style.css site/robots.txt)",
+      "Bash(.venv/bin/python -m pytest tests/test_cli.py -v)",
+      "Bash(.venv/bin/python - macro/cli.py)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
   }
 }

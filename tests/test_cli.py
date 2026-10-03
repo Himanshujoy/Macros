@@ -158,3 +158,35 @@ def test_debug_lets_the_full_error_through(paths, monkeypatch):
     monkeypatch.setattr(cli, "refresh", explode)
     with pytest.raises(RuntimeError, match="boom"):
         cli.main(["refresh", "--debug"])
+
+
+def test_preview_needs_a_built_dist(paths, monkeypatch, capsys):
+    patch_main(monkeypatch, paths)
+    assert cli.main(["preview"]) == 1
+    assert "refresh" in capsys.readouterr().err
+
+
+def test_preview_serves_dist_on_the_chosen_port(paths, monkeypatch):
+    run(paths)
+    served = {}
+
+    def fake_run(location, port):
+        served.update(location=location, port=port)
+        return 0
+
+    patch_main(monkeypatch, paths)
+    monkeypatch.setattr(cli.serve, "run", fake_run)
+    assert cli.main(["preview", "--port", "9090"]) == 0
+    assert served == {"location": paths["dist"], "port": 9090}
+
+
+def test_preview_reports_a_port_it_cannot_use(paths, monkeypatch, capsys):
+    run(paths)
+
+    def busy(location, port):
+        raise OSError("Address already in use")
+
+    patch_main(monkeypatch, paths)
+    monkeypatch.setattr(cli.serve, "run", busy)
+    assert cli.main(["preview"]) == 1
+    assert "--port" in capsys.readouterr().err

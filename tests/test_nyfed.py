@@ -108,3 +108,8 @@ def test_a_failed_request_is_a_source_error():
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(SourceError):
         nyfed.load(client, date(2026, 10, 3))
+
+
+def test_a_malformed_row_is_named_by_its_date_and_cause():
+    with pytest.raises(SourceError, match="dated 2026-10-01: ValueError"):
+        nyfed.parse({"refRates": [{**GOOD, "percentRate": "n/a"}]})

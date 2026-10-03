@@ -18,6 +18,7 @@ CONTENT_TYPES = {
     ".svg": "image/svg+xml",
 }
 INTERNAL = ("manifest.json", "SHA256SUMS")
+BUILD_ID_MARK = "{{BUILD_ID}}"  # in index.html, replaced so asset addresses change with every build
 
 
 def write_manifest(dist: Path, snapshot_id: str) -> None:
@@ -47,6 +48,8 @@ def build_dist(dist: Path, site: Path, snapshot: dict) -> None:
     """Builds in a temporary folder and swaps it in, so a failure leaves the old dist/ in place."""
     staging = dist.with_name(dist.name + ".tmp")
     previous = dist.with_name(dist.name + ".old")
+    if previous.exists() and not dist.exists():
+        previous.rename(dist)  # an earlier run stopped between the two renames: put the old folder back
     for leftover in (staging, previous):
         if leftover.exists():
             shutil.rmtree(leftover)
@@ -59,6 +62,10 @@ def build_dist(dist: Path, site: Path, snapshot: dict) -> None:
     except ValueError as exc:
         raise BuildError(f"build: the data cannot be written as JSON: {exc}") from None
     (staging / "data.json").write_text(data, encoding="utf-8")
+    page = staging / "index.html"
+    if page.is_file():
+        build_id = str(snapshot.get("build_id", snapshot["snapshot_id"]))
+        page.write_text(page.read_text(encoding="utf-8").replace(BUILD_ID_MARK, build_id), encoding="utf-8")
     write_manifest(staging, snapshot["snapshot_id"])
 
     # Two renames, so dist/ is never missing for longer than the gap between them.
@@ -70,5 +77,4 @@ def build_dist(dist: Path, site: Path, snapshot: dict) -> None:
         if previous.exists():
             previous.rename(dist)
         raise
-    if previous.exists():
-        shutil.rmtree(previous)
+    shutil.rmtree(previous, ignore_errors=True)

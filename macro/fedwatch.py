@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from macro.dates import Month, add_months
 
 STEP = 0.25
+DECIDED_TOLERANCE = 0.25  # a decided meeting's implied moves must be this close to a whole number
 
 
 class FedWatchError(Exception):
@@ -99,7 +100,9 @@ def distribution(
 
     `pending` are the end dates of the meetings to count, as priced on `pricing_date`.
     `decided` are those among them whose outcome the prices already reflect: each counts as
-    its nearest whole number of moves, with certainty. `meeting_ends` is the whole calendar,
+    its nearest whole number of moves, with certainty. If the prices are not within a quarter
+    of a move of a whole number, they do not reflect the outcome yet, and that is reported as
+    a missing price. `meeting_ends` is the whole calendar,
     `prices` maps a contract month to its closing price by day, and `rates` is EFFR by day.
     """
     if not pending:
@@ -118,8 +121,13 @@ def distribution(
     total = {0: 1.0}
     for meeting_end in sorted(pending):
         if (meeting_end.year, meeting_end.month) < pricing_month:
-            raise FedWatchError(f"the rate table has not caught up with the {meeting_end} meeting")
+            raise MissingPrice(f"the rate table has not caught up with the {meeting_end} meeting")
         moves = expected_moves(meeting_end, implied, lambda month: month in meeting_months)
-        shares = {round(moves): 1.0} if meeting_end in decided else split(moves)
+        if meeting_end in decided:
+            if abs(moves - round(moves)) > DECIDED_TOLERANCE:
+                raise MissingPrice(f"prices on {pricing_date} do not show a clear outcome for the {meeting_end} meeting")
+            shares = {round(moves): 1.0}
+        else:
+            shares = split(moves)
         total = combine(total, shares)
     return total

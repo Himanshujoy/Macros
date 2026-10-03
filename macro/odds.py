@@ -12,6 +12,7 @@ from macro.sources.nyfed import FedFundsTable
 SHOWN_FROM = 0.0005  # a range appears in the table once any column gives it at least 0.05%
 STALE_AFTER_DAYS = 5  # the rate table may trail the pricing date by a long weekend, not more
 NOW_FALLBACK_DAYS = 3  # how many of the latest price days to try for "now"
+SETTLE_MINUTES = 30  # after a statement, quotes need this long to show the outcome
 
 
 def comparison_dates(price_days: list[date]) -> list[tuple[str, date | None]]:
@@ -57,6 +58,12 @@ def build_odds(
         pending = [end for end in ends if base_day <= end <= target]
         if live:
             decided = [end for end in pending if statement_at[end] <= now]
+            for end in decided:
+                settled_at = statement_at[end] + timedelta(minutes=SETTLE_MINUTES)
+                if now < settled_at:
+                    raise SourceError(
+                        f"odds: the {end} statement has only just come out. Refresh after {settled_at:%H:%M} UTC"
+                    )
             late = [end for end in decided if end > day]
             if late:
                 raise SourceError(f"odds: prices have not caught up with the {late[0]} decision. Refresh later")

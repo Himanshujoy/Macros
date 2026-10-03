@@ -237,7 +237,7 @@ Which meeting, and which meetings are counted:
 - **Target.** The odds are for the next meeting whose statement is still ahead, the same rule the countdown uses.
 - **Base range.** It comes from the latest New York Fed row on or before the pricing date. A row carries the range in force that day, and a decision takes effect the day after the meeting ends. So the row dated on a meeting day still shows the old range, and the table can be a day behind prices.
 - **Counted meetings.** Every meeting ending on or after that row's date, up to the target, is counted. Each total number of moves maps to a target range above or below the base range.
-- **Decided meetings.** A counted meeting whose outcome the prices already reflect counts as its nearest whole number of moves, with certainty. For a comparison date that is a meeting ending on or before that date. For "now" it is a meeting whose statement time has passed. If the latest prices are older than such a decision, the refresh stops and says to try later.
+- **Decided meetings.** A counted meeting whose outcome the prices already reflect counts as its nearest whole number of moves, with certainty. For a comparison date that is a meeting ending on or before that date. For "now" it is a meeting whose statement time has passed. If the latest prices are older than such a decision, the refresh stops and says to try later. Quotes need time to show an outcome, so the refresh also stops for the first 30 minutes after a statement, and prices that are not within a quarter of a move of a whole number count as "no price yet".
 - **Current range.** The base range plus the decided moves. "Hold" is the probability of ending in the current range, "cut" is the sum below it and "hike" is the sum above.
 - **Stale table.** If the rate table is more than five days behind the pricing date, the refresh stops.
 
@@ -355,7 +355,7 @@ Each module has one job and can be tested alone. The source modules return plain
 
 There are no secrets in this version. `.gitignore` covers `.env`, `.venv/`, `dist/`, `work/`, `.cache/` and `__pycache__/`.
 
-Treasury data is cached under `.cache/`, one file per year, with an index of the day each file was fetched. A past year comes from the cache only if its file was fetched after that year ended and still parses. The current year is always fetched, and so is a past year last fetched before it ended.
+Treasury data is cached under `.cache/`, one file per year, with an index of the day each file was fetched. A past year comes from the cache only if its file was fetched on or after 8 January of the following year and still parses with rows; the Treasury can post a year's last rows a few days late. The current year is always fetched, and so is a past year last fetched before then. A file with no rows is never cached. It is accepted only for the current year, in the first seven days of January.
 
 ### 7.4 Publish
 
