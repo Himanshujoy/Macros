@@ -4,15 +4,150 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
 <title>Macros</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="vendor/uPlot.min.css?v={{BUILD_ID}}">
 <link rel="stylesheet" href="style.css?v={{BUILD_ID}}">
 </head>
 <body>
-<main>
-<h1>Macros</h1>
-<p id="status">Loading the data…</p>
-<p class="note">Placeholder page. The charts arrive with the next plan.</p>
+<header class="top">
+  <div class="top-main">
+    <h1>Macros</h1>
+    <a id="explain" class="button" target="_blank" rel="noopener" hidden>Explain Macros</a>
+    <span id="explain-off" class="button is-off" aria-disabled="true" hidden>Explain Macros</span>
+    <span id="explain-note" class="quiet"></span>
+  </div>
+  <p id="refreshed" class="quiet"></p>
+</header>
+
+<div class="alerts">
+  <p id="load-error" class="notice" role="alert" hidden></p>
+  <noscript><p class="notice">This page needs JavaScript to draw its charts.</p></noscript>
+</div>
+
+<main id="page" hidden>
+  <div class="filters" role="group" aria-label="Date range for the two history charts">
+    <span class="filters-label">Range</span>
+    <div class="segmented" id="presets">
+      <button type="button" data-preset="1Y" aria-pressed="false">1Y</button>
+      <button type="button" data-preset="5Y" aria-pressed="false">5Y</button>
+      <button type="button" data-preset="10Y" aria-pressed="true">10Y</button>
+      <button type="button" data-preset="MAX" aria-pressed="false">Max</button>
+    </div>
+    <label>From <input type="date" id="from"></label>
+    <label>To <input type="date" id="to"></label>
+  </div>
+
+  <section aria-labelledby="yields-heading">
+    <h2 id="yields-heading">US Treasury yields</h2>
+    <div class="pair">
+      <figure class="card">
+        <figcaption>
+          <h3 id="history-title">Yield history</h3>
+          <p id="history-readout" class="readout"></p>
+        </figcaption>
+        <div id="history-chart" class="plot" role="img" aria-labelledby="history-title"></div>
+        <div class="slider">
+          <input type="range" id="date-slider" step="1">
+          <label for="date-slider">Date shown on the yield curve</label>
+        </div>
+      </figure>
+
+      <figure class="card">
+        <figcaption class="with-control">
+          <div>
+            <h3 id="curve-title">Yield curve</h3>
+            <p id="curve-readout" class="readout"></p>
+          </div>
+          <div class="segmented" id="modes" role="group" aria-label="Horizontal axis">
+            <button type="button" data-mode="even" aria-pressed="true">Even spacing</button>
+            <button type="button" data-mode="scale" aria-pressed="false">True scale</button>
+          </div>
+        </figcaption>
+        <div id="curve-chart" class="plot"></div>
+        <div class="slider" id="tenor-slider-wrap" data-hint="Switch to even spacing to pick a tenor">
+          <input type="range" id="tenor-slider" step="1">
+          <label for="tenor-slider">Tenor shown on the yield history</label>
+        </div>
+        <details>
+          <summary>Show table</summary>
+          <table id="curve-table">
+            <thead><tr><th scope="col">Tenor</th><th scope="col">Yield</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </details>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="fomc-heading">
+    <h2 id="fomc-heading">Next FOMC decision</h2>
+    <p id="odds-outdated" class="notice" hidden></p>
+    <div class="pair">
+      <div class="card glance">
+        <div>
+          <p class="label">Time to the next statement</p>
+          <p id="countdown" class="hero"></p>
+          <p id="countdown-when" class="quiet"></p>
+        </div>
+        <div>
+          <h3 id="odds-title">Odds for the decision</h3>
+          <div class="tiles" id="odds-tiles"></div>
+          <p id="odds-readout" class="readout"></p>
+        </div>
+      </div>
+
+      <figure class="card">
+        <figcaption>
+          <h3>Odds by target range</h3>
+          <p class="readout">Where the target range would be after the decision, in percent</p>
+        </figcaption>
+        <div id="odds-chart" class="plot"></div>
+      </figure>
+    </div>
+
+    <div class="card below">
+      <h3>How the odds have moved</h3>
+      <div class="aside">
+        <div class="scroll">
+          <table id="odds-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="quiet">Own calculation from 30-Day Federal Funds futures prices, using the method CME Group publishes for its FedWatch tool. These are not CME FedWatch figures.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="fed-heading">
+    <h2 id="fed-heading">Fed funds rate and target range</h2>
+    <figure class="card">
+      <figcaption class="with-control">
+        <p id="fed-readout" class="readout"></p>
+        <ul class="legend">
+          <li><span class="key line series-1"></span>Effective rate (EFFR)</li>
+          <li><span class="key box series-2"></span>Target range</li>
+        </ul>
+      </figcaption>
+      <div id="fed-chart" class="plot" role="img" aria-labelledby="fed-heading"></div>
+      <p id="fed-lag" class="notice" hidden></p>
+    </figure>
+  </section>
 </main>
+
+<footer id="notices" hidden>
+  <h2>Sources and notices</h2>
+  <ul>
+    <li>Yields: U.S. Department of the Treasury, Daily Treasury Par Yield Curve Rates.</li>
+    <li>The EFFR is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the EFFR by theta-markets.com, does not sanction or endorse any particular republication, and has no liability for your use.</li>
+    <li>Rate odds: own calculation from futures prices. Not investment advice.</li>
+    <li id="ai-notice" hidden></li>
+  </ul>
+</footer>
+
+<script src="vendor/uPlot.iife.min.js?v={{BUILD_ID}}" defer></script>
 <script type="module" src="app.js?v={{BUILD_ID}}"></script>
 </body>
 </html>

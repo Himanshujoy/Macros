@@ -77,7 +77,8 @@ Range:  1Y  5Y  10Y  Max   From [date]  To [date]
 |  <---------- date slider ---------->  |  <-------- tenor slider -------->  |
 +---------------------------------------------------------------------------+
 +-- Next FOMC decision ------------------------------------------------------+
-|  Countdown                           |  Odds by target range, plus table  |
+|  Countdown; cut, hold, hike          |  Odds by target range              |
+|  How the odds have moved (table)                                           |
 +---------------------------------------------------------------------------+
 +-- Fed funds rate and target range ----------------------------------------+
 Sources and notices
@@ -89,6 +90,7 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 - Presets `1Y`, `5Y`, `10Y`, `Max`, then custom `From` and `To` dates. The default is `10Y`.
 - The range applies to both history charts: yield history and the Fed funds rate. One range keeps the two charts comparable.
+- A custom range is kept inside the data and put in order. It must span at least two different dates; otherwise the two inputs go back to the range in force.
 
 ### 5.3 UST yields
 
@@ -96,17 +98,20 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 - The title names the tenor, for example "10-year Treasury yield".
 - A date slider sits under the chart and spans exactly the dates shown. It selects one date. The default is the latest date. A vertical marker shows the selected date on the chart.
+- Each slider has a caption saying what it picks: "Date shown on the yield curve" and "Tenor shown on the yield history".
 - A readout shows the selected date and that day's yield.
 
 **Right: yield curve.** Yield against tenor for the selected date.
 
 - A line with a marker per tenor. The title names the date.
 - A tenor slider sits under the chart, one step per tenor. It selects the tenor shown on the left. The default is 10Y. The selected tenor's marker is highlighted.
+- Clicking a point on the curve selects that tenor too, in either mode.
 - A "Show table" toggle lists tenor and yield for the selected date.
 - A mode toggle above the chart switches the horizontal axis between two modes:
   - **Even spacing**, the default. Tenors are evenly spaced and labelled (1M, 3M, ... 30Y). The tenor slider is active and its steps line up with the points.
   - **True scale.** Tenors are placed by their years to maturity, so the curve keeps its real, undistorted shape. The tenor slider is disabled and greyed out. Hovering over it, or reaching it with the keyboard, shows the hint "Switch to even spacing to pick a tenor".
 - Switching mode keeps the selected date and tenor. The selected tenor stays highlighted in both modes.
+- Every tenor has a tick mark. Where the labels would collide (true scale, or a narrow screen), the most watched tenors are labelled first: 10Y, 2Y, 30Y, 5Y, 3M, then the rest.
 - The hint is attached to a wrapper around the slider, because a disabled input does not reliably raise hover events.
 
 **Linking rules.**
@@ -119,13 +124,13 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 ### 5.4 Next FOMC decision
 
-**Countdown.** Days, hours and minutes to the scheduled statement, updated each minute in the browser. It shows the statement time in US Eastern time and in the visitor's local time. It always counts to the first meeting on the list that is still in the future.
+**Countdown.** Days, hours and minutes to the scheduled statement, kept current in the browser. It shows the statement time in US Eastern time and in the visitor's local time. It always counts to the first meeting on the list that is still in the future.
 
 **Odds.**
 
-- One bar per target range that has a non-zero probability, with the value printed on the bar. The current range is labelled "current".
-- A summary line: cut, hold and hike percentages.
-- A table with one row per range and columns `Now`, `1 day`, `1 week` and `1 month`, each headed by its date. A cell with no price data shows "n/a".
+- A summary beside the countdown: cut, hold and hike percentages, the current range and the pricing date.
+- One bar per target range that has a non-zero probability, with the value printed on the bar. The current range is labelled "current". On a narrow screen a range is written on two lines under its bar.
+- Below both, a table with one row per range and columns `Now`, `1 day`, `1 week` and `1 month`, each headed by its date. A cell with no price data shows "n/a".
 - A note: "Own calculation from 30-Day Federal Funds futures prices, using the method CME Group publishes for its FedWatch tool. These are not CME FedWatch figures."
 - If the meeting the odds refer to has already passed when the page is viewed, the block says the odds were calculated before that decision.
 
@@ -133,6 +138,8 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 - The effective federal funds rate (EFFR) as a line, with the target range as a shaded band behind it. Before 16 December 2008 the target was a single rate, drawn as a line.
 - A legend names the two series. Data starts on 3 July 2000.
+- The selected date's marker also appears on this chart, with a readout of that day's rate and target.
+- The published series trails a decision by a day or two. When the odds' current range (section 6.3) differs from the last published target range, a note under the chart says the Fed has moved the range and that the series will catch up.
 
 ### 5.6 Explain Macros button
 
@@ -143,7 +150,7 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 ### 5.7 Header and footer
 
 - The header shows when the data was refreshed. If that is more than three days ago, it also says how many days old the data is.
-- The footer carries the source credits and notices from section 6.1, and the AI notice: "Written by an AI model (<model name>) from the data on this page. It can be wrong. Not investment advice."
+- The footer carries the source credits and notices from section 6.1, and, when a snapshot has an analysis, the AI notice: "The analysis was written by an AI model (<model name>) from the data on this page. It can be wrong. Not investment advice."
 
 ### 5.8 Chart rules
 
@@ -156,8 +163,11 @@ Implementers load the `dataviz` skill before writing any chart code and follow i
 - Text uses text colours, never a series colour.
 - Light and dark themes follow the visitor's system setting. Both palettes are checked with the skill's validator script.
 - Labels and values are inserted with `textContent`, never `innerHTML`.
+- Dates are written day first ("2 Oct 2026"), on the axes as well.
 
-The two history charts are drawn with uPlot 1.6.32 (MIT licence), copied into the project. The curve and the odds bars use uPlot or plain SVG, whichever meets these rules more simply. No other chart library is used, and there is no build step and no npm dependency.
+The two history charts are drawn with uPlot 1.6.32 (MIT licence), copied into `site/vendor/` together with its licence; a test checks the copies against the published checksums. The curve and the odds bars are plain SVG. No other chart library is used, and there is no build step and no npm dependency.
+
+The page's own code is three JavaScript modules: `lib.js` (pure helpers with no page access, tested under Node), `charts.js` (drawing) and `app.js` (the visitor's choices and the events that change them).
 
 ### 5.9 Privacy rules
 
@@ -171,7 +181,7 @@ The two history charts are drawn with uPlot 1.6.32 (MIT licence), copied into th
 
 | Data | Source | Key | Terms | Notice shown on the page |
 |---|---|---|---|---|
-| Treasury yields, from 1990 | US Treasury, Daily Treasury Par Yield Curve Rates, one CSV per year from `home.treasury.gov` | None | US government work | "Source: U.S. Department of the Treasury, Daily Treasury Par Yield Curve Rates." |
+| Treasury yields, from 1990 | US Treasury, Daily Treasury Par Yield Curve Rates, one CSV per year from `home.treasury.gov` | None | US government work | "Yields: U.S. Department of the Treasury, Daily Treasury Par Yield Curve Rates." |
 | EFFR and target range, from 3 July 2000 | New York Fed Markets Data API, `markets.newyorkfed.org/api/rates/unsecured/effr/search.json` | None | Free to copy and distribute with their notice | "The EFFR is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the EFFR by theta-markets.com, does not sanction or endorse any particular republication, and has no liability for your use." |
 | FOMC meeting dates | Federal Reserve Board calendar | None | US government work | None needed |
 | Fed funds futures prices | Yahoo Finance chart endpoint, symbols such as `ZQV26.CBT` | None | Unofficial endpoint; Yahoo does not allow republishing its data | The page shows only calculated probabilities, never prices. The odds note in 5.4 applies |
@@ -330,7 +340,7 @@ macro/                  Python package, runs on the Mac
   publish.py            upload, switch, verify, prune, rollback
   cli.py
 server/serve.py         the web server; standard library only; runs on the box and in preview
-site/                   index.html, app.js, charts.js, style.css, vendor/uPlot
+site/                   index.html, style.css, app.js, charts.js, lib.js, vendor/ (uPlot)
 data/fomc_meetings.json
 prompts/analysis.md     instructions for whoever writes the analysis
 work/                   facts.json and analysis.json; git-ignored
@@ -394,11 +404,11 @@ Nothing is named `theta-*`. No package is installed and no venv is created: the 
 - `/healthz` returns `ok`.
 - If there is no current release, every page returns a plain 503.
 - Sends `ETag` and answers `If-None-Match` with 304.
-- `Cache-Control`: a URL with a `?v=` version gets `public, max-age=31536000, immutable`. Everything else gets `public, max-age=60`. The page requests its scripts, styles and the PDF with `?v=`.
+- `Cache-Control`: a URL with a `?v=` version gets `public, max-age=31536000, immutable`. Everything else gets `public, max-age=60`. The page requests its scripts, styles and the PDF with `?v=`. The build writes the build id into `index.html` and into the page's own scripts, which import each other the same way, so a new build is never mixed with files cached from an old one.
 - Every response carries `X-Robots-Tag: noindex, nofollow`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. `robots.txt` disallows everything.
 - HTML responses carry `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`.
 - The PDF is served inline.
-- Logs one line per request to the journal: method, path and status. No addresses, no headers.
+- Logs one line per request to the journal: method, path and status. No addresses, no headers, and nothing for a connection that was only closed for being silent.
 - Never sends a stack trace or a version string. Connections time out after 15 seconds of silence.
 - Picks up a new release on the next request after `current` changes. No restart.
 - `serve.py --self-test` starts the server on a free localhost port against a small built-in sample, requests its own pages, checks the rules above and exits 0 or 1. It writes nothing.
@@ -573,10 +583,11 @@ Tests never touch a real service: no real network, no SSH, no box, no Cloudflare
 - **Facts.** Date resolution across weekends and holidays, spreads, and changes.
 - **Analysis.** Sample files: a good one, invalid JSON, a missing field, an over-long text and a wrong snapshot id.
 - **PDF.** The output starts with `%PDF`, has at least one page and contains the section headings.
-- **Build.** The manifest lists every file with the right checksum.
+- **Build.** The manifest lists every file with the right checksum. The build id is written into the page and its own scripts, and into nothing under `vendor/`.
 - **Server.** Started on a free localhost port: the allowlist, 404 and 405, headers, `ETag`, and picking up a switched release.
 - **Publish and rollback.** A fake command runner records the commands; the tests check their order and that a failure stops the sequence before the switch.
-- **Page logic.** The pure JavaScript helpers (nearest date, range clipping, tenor lookup, and point positions in both curve modes) run under Node's built-in test runner, with no npm packages.
+- **Page logic.** The pure JavaScript helpers (nearest date, range clipping, tenor lookup, and point positions in both curve modes) run under Node's built-in test runner, with no npm packages. The Python suite runs them too, and skips them with a message where Node is not installed.
+- **Page files.** Static checks: every element the script looks up is on the page, nothing in the page would be blocked by the content security policy, every address the page asks for is local and carries the build id, every colour role exists in both themes, and the vendored library matches its published checksums.
 
 Before Phase 2, the page is also checked by eye in the local preview, in light and dark themes and at phone width.
 

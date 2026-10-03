@@ -114,14 +114,30 @@ def test_an_old_dist_stranded_by_an_interrupted_run_is_put_back_first(tmp_path):
     assert json.loads((dist / "data.json").read_text()) == SNAPSHOT
 
 
-def test_the_page_gets_the_build_id_in_its_asset_addresses(tmp_path):
+def test_the_page_and_its_own_scripts_get_the_build_id_in_their_addresses(tmp_path):
     site = tmp_path / "site"
-    site.mkdir()
+    (site / "vendor").mkdir(parents=True)
     (site / "index.html").write_text('<script src="app.js?v={{BUILD_ID}}"></script>')
-    (site / "app.js").write_text("// {{BUILD_ID}} is left alone outside the page")
+    (site / "app.js").write_text('import "./lib.js?v={{BUILD_ID}}";')
+    (site / "lib.js").write_text("// nothing to fill in")
+    (site / "style.css").write_text("/* {{BUILD_ID}} is left alone in a stylesheet */")
+    (site / "vendor" / "other.js").write_text("// {{BUILD_ID}} is left alone in a file that is not ours")
     dist = tmp_path / "dist"
     build_dist(dist, site, {**SNAPSHOT, "build_id": "B7"})
     assert (dist / "index.html").read_text() == '<script src="app.js?v=B7"></script>'
-    assert "{{BUILD_ID}}" in (dist / "app.js").read_text()
-    listed = json.loads((dist / "manifest.json").read_text())["files"]["index.html"]["sha256"]
-    assert listed == sha(dist / "index.html")
+    assert (dist / "app.js").read_text() == 'import "./lib.js?v=B7";'
+    assert (dist / "lib.js").read_text() == "// nothing to fill in"
+    assert "{{BUILD_ID}}" in (dist / "style.css").read_text()
+    assert "{{BUILD_ID}}" in (dist / "vendor" / "other.js").read_text()
+    files = json.loads((dist / "manifest.json").read_text())["files"]
+    for name in ("index.html", "app.js"):
+        assert files[name]["sha256"] == sha(dist / name)
+
+
+def test_without_a_build_id_the_snapshot_id_is_used(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "app.js").write_text('import "./lib.js?v={{BUILD_ID}}";')
+    dist = tmp_path / "dist"
+    build_dist(dist, site, SNAPSHOT)
+    assert (dist / "app.js").read_text() == 'import "./lib.js?v=20261003T181500Z";'

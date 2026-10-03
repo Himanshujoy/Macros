@@ -1,6 +1,6 @@
 # Macros
 
-A one-page view of US macro data, served at `https://macros.theta-markets.com/`.
+A one-page view of US macro data, served at [`https://macros.theta-markets.com/`](https://macros.theta-markets.com/).
 
 - **Treasury yields:** two linked charts, yield history for one tenor and the yield curve on one date.
 - **Rate odds:** the chance of a cut, hold or hike at the next FOMC meeting, with a countdown.

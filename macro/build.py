@@ -18,7 +18,8 @@ CONTENT_TYPES = {
     ".svg": "image/svg+xml",
 }
 INTERNAL = ("manifest.json", "SHA256SUMS")
-BUILD_ID_MARK = "{{BUILD_ID}}"  # in index.html, replaced so asset addresses change with every build
+BUILD_ID_MARK = "{{BUILD_ID}}"  # replaced with the build id, so asset addresses change with every build
+STAMPED = ("index.html", "*.js")  # where the mark is filled in: the site's top folder only, never vendor/
 
 
 def write_manifest(dist: Path, snapshot_id: str) -> None:
@@ -62,10 +63,12 @@ def build_dist(dist: Path, site: Path, snapshot: dict) -> None:
     except ValueError as exc:
         raise BuildError(f"build: the data cannot be written as JSON: {exc}") from None
     (staging / "data.json").write_text(data, encoding="utf-8")
-    page = staging / "index.html"
-    if page.is_file():
-        build_id = str(snapshot.get("build_id", snapshot["snapshot_id"]))
-        page.write_text(page.read_text(encoding="utf-8").replace(BUILD_ID_MARK, build_id), encoding="utf-8")
+    build_id = str(snapshot.get("build_id", snapshot["snapshot_id"]))
+    for pattern in STAMPED:
+        for path in staging.glob(pattern):
+            text = path.read_text(encoding="utf-8")
+            if BUILD_ID_MARK in text:
+                path.write_text(text.replace(BUILD_ID_MARK, build_id), encoding="utf-8")
     write_manifest(staging, snapshot["snapshot_id"])
 
     # Two renames, so dist/ is never missing for longer than the gap between them.

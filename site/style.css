@@ -1,18 +1,642 @@
+/* Colours are roles, defined once for light and once for dark. The charts read them from here. */
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-2-wash: rgba(235, 104, 52, 0.14);
+  --thumb: 16px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-2-wash: rgba(217, 89, 38, 0.22);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `hidden` must win over any class that sets `display`. */
+[hidden] {
+  display: none !important;
 }
 
 body {
   margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
 }
 
-main {
-  max-width: 60rem;
+.top,
+.alerts,
+main,
+footer {
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 1.5rem 1rem;
+  padding: 0 20px;
 }
 
-.note {
-  opacity: 0.7;
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-top: 20px;
+  padding-bottom: 12px;
+}
+
+.top-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+h2 {
+  margin: 28px 0 10px;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+.quiet {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.readout {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  min-height: 19px;
+}
+
+.notice {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* Buttons and the two-or-more-way switches */
+.button {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button:hover {
+  opacity: 0.88;
+}
+
+.button.is-off {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 5px 12px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+}
+
+/* The one filter row, above everything it scopes */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.filters-label {
+  font-weight: 600;
+}
+
+.filters input[type="date"] {
+  margin-left: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* Cards and layout */
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.card {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.card.below {
+  margin-top: 16px;
+}
+
+/* The numbers to take in at a glance: two groups, spread over the card's height. */
+.glance {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 20px;
+}
+
+section > .notice {
+  margin: 0 0 12px;
+}
+
+figcaption {
+  margin-bottom: 8px;
+}
+
+figcaption.with-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.plot {
+  position: relative;
+  overflow: hidden;
+}
+
+.plot svg {
+  display: block;
+}
+
+/* Sliders: a fixed 16px thumb, so their travel can be lined up with the chart above */
+.slider {
+  position: relative;
+  margin-top: 6px;
+}
+
+.slider label {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+input[type="range"] {
+  display: block;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--axis);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--axis);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -6px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--series-1);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--thumb);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--series-1);
+}
+
+input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.slider.is-locked {
+  cursor: not-allowed;
+}
+
+.slider.is-locked::after {
+  content: attr(data-hint);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.slider.is-locked:hover::after,
+.slider.is-locked:focus::after {
+  opacity: 1;
+}
+
+/* SVG charts take their colours from the same roles */
+.grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.tick {
+  fill: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tick.strong {
+  fill: var(--ink-2);
+}
+
+.line {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dot {
+  fill: var(--series-1);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.column {
+  fill: var(--series-1);
+}
+
+/* A value label keeps a rim of the surface colour, so it stays readable where a line runs behind it. */
+.point-label {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hit targets are invisible until the pointer or the keyboard is on them. */
+.hit {
+  fill: var(--ink);
+  fill-opacity: 0;
+  outline: none;
+}
+
+.hit:hover {
+  fill-opacity: 0.06;
+}
+
+.hit.pick {
+  cursor: pointer;
+}
+
+.hit:focus-visible {
+  stroke: var(--series-1);
+  stroke-width: 2;
+}
+
+/* uPlot's cursor line: a solid hairline, not its default dashes */
+.u-hz .u-cursor-x {
+  border-right: 1px solid var(--axis);
+}
+
+/* Tooltip, legend and their colour keys */
+.tip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tip-title {
+  color: var(--ink-2);
+}
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tip-row span:last-child {
+  color: var(--ink-2);
+}
+
+.key {
+  display: inline-block;
+  flex: none;
+}
+
+.key.line {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.key.box {
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.key.series-1 {
+  background: var(--series-1);
+}
+
+.key.series-2 {
+  background: var(--series-2);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Numbers that stand alone */
+.label {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.hero {
+  margin: 2px 0 6px;
+  font-size: 56px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 8px 0;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+}
+
+.tile .value {
+  font-size: 24px;
+  font-weight: 650;
+}
+
+/* Tables: the same numbers without the chart */
+table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--grid);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* A table too wide for a narrow screen scrolls inside its card, not the page. */
+.scroll {
+  overflow-x: auto;
+}
+
+th:first-child {
+  text-align: left;
+}
+
+thead th {
+  color: var(--ink-2);
+  font-weight: 600;
+  vertical-align: bottom;
+}
+
+tbody th {
+  font-weight: 600;
+}
+
+.sub {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+details {
+  margin-top: 8px;
+}
+
+summary {
+  width: max-content;
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#curve-table {
+  max-width: 260px;
+}
+
+/* A table with a note beside it, or under it when there is no room. */
+.aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 40px;
+}
+
+.aside .scroll {
+  flex: 1 1 420px;
+  max-width: 620px;
+}
+
+.aside .quiet {
+  flex: 1 1 260px;
+}
+
+footer {
+  margin-top: 32px;
+  padding-bottom: 40px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+footer h2 {
+  margin-top: 0;
+  font-size: 14px;
+}
+
+footer ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+footer li + li {
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .top,
+  .alerts,
+  main,
+  footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  th,
+  td {
+    padding: 5px 4px;
+  }
 }

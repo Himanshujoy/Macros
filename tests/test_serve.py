@@ -303,12 +303,14 @@ def test_a_request_that_is_not_http_gets_a_plain_refusal(running):
     assert b"Traceback" not in reply and b"Python" not in reply
 
 
-def test_a_silent_connection_is_closed(release):
+def test_a_silent_connection_is_closed_and_leaves_nothing_in_the_log(release):
     server = Running(serve.DiskSite(release), idle_timeout=0.3)
     try:
         started = time.monotonic()
         assert server.raw(b"", wait=3.0) == b""
         assert time.monotonic() - started < 2.5
+        time.sleep(0.1)  # the handler thread finishes just after the socket closes
+        assert server.lines == []
     finally:
         server.close()
 

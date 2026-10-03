@@ -220,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, headers, body)
 
     def log_message(self, format, *args) -> None:
-        self.server.log("note " + printable(format % args))
+        """Nothing: the base class uses this only to say an idle connection timed out, which is routine."""
 
 
 class Server(ThreadingHTTPServer):
