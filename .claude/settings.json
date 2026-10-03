@@ -82,7 +82,24 @@
       "Bash(.venv/bin/python -m pytest tests/test_fomc.py -v)",
       "Bash(.venv/bin/python - tests/test_futures.py)",
       "Bash(.venv/bin/python -m pytest tests/test_futures.py)",
-      "Bash(.venv/bin/python - macro/sources/futures.py)"
+      "Bash(.venv/bin/python - macro/sources/futures.py)",
+      "Bash(.venv/bin/python - tests/test_fedwatch.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_fedwatch.py)",
+      "Bash(.venv/bin/python - macro/fedwatch.py)",
+      "Bash(.venv/bin/python - tests/test_odds.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_odds.py)",
+      "Bash(.venv/bin/python - macro/odds.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_odds.py -v)",
+      "Bash(.venv/bin/python - tests/test_facts.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_facts.py)",
+      "Bash(.venv/bin/python - macro/facts.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_facts.py -v)",
+      "Bash(.venv/bin/python - tests/test_snapshot.py tests/test_build.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_snapshot.py tests/test_build.py)",
+      "Bash(.venv/bin/python - macro/snapshot.py macro/build.py)",
+      "Bash(.venv/bin/python - tests/test_cli.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_cli.py)",
+      "Bash(.venv/bin/python - macro/cli.py macro/__main__.py)"
     ]
   }
 }
