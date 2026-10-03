@@ -1,0 +1,10 @@
+[project]
+name = "macro"
+version = "0.1.0"
+description = "Builds the macros.theta-markets.com page"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+addopts = "-q"
