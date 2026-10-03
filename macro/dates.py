@@ -1,0 +1,19 @@
+"""Date helpers shared by the odds and the facts."""
+from __future__ import annotations
+
+import calendar
+from bisect import bisect_right
+from datetime import date
+
+
+def months_back(day: date, count: int) -> date:
+    """The same day `count` months earlier, clamped to the end of a shorter month."""
+    index = day.year * 12 + (day.month - 1) - count
+    year, month = index // 12, index % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def on_or_before(days: list[date], limit: date) -> date | None:
+    """The latest day in a sorted list that is not after `limit`."""
+    index = bisect_right(days, limit) - 1
+    return days[index] if index >= 0 else None

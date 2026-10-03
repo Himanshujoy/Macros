@@ -62,7 +62,27 @@
       "Bash(.venv/bin/python -V)",
       "Bash(.venv/bin/python -m pytest tests/test_network_guard.py)",
       "Bash(echo \"pytest exit code: $?\")",
-      "Bash(.venv/bin/python -)"
+      "Bash(.venv/bin/python -)",
+      "Bash(.venv/bin/python -m pytest tests/test_dates.py)",
+      "Bash(find macro *)",
+      "Read(//private/tmp/**)",
+      "Bash(.venv/bin/python - tests/samples.py)",
+      "Bash(.venv/bin/python - tests/test_treasury.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_treasury.py)",
+      "Bash(.venv/bin/python - macro/sources/treasury.py)",
+      "Bash(.venv/bin/python -m pytest)",
+      "Bash(.venv/bin/python - tests/test_nyfed.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_nyfed.py)",
+      "Bash(.venv/bin/python - macro/sources/nyfed.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_nyfed.py -v)",
+      "Bash(.venv/bin/python - data/fomc_meetings.json)",
+      "Bash(.venv/bin/python - tests/test_fomc.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_fomc.py)",
+      "Bash(.venv/bin/python - macro/sources/fomc.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_fomc.py -v)",
+      "Bash(.venv/bin/python - tests/test_futures.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_futures.py)",
+      "Bash(.venv/bin/python - macro/sources/futures.py)"
     ]
   }
 }
