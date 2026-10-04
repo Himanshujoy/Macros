@@ -191,25 +191,34 @@ function renderOdds() {
   $("odds-table").tBodies[0].replaceChildren(...rows);
 }
 
+/** Writes text only when it has changed, so a line that is rewritten every second can still be selected and copied. */
+function setText(id, text) {
+  const node = $(id);
+  if (node.textContent !== text) node.textContent = text;
+}
+
 function renderClock() {
   const now = Date.now();
   const meeting = lib.nextMeeting(data.fomc.meetings, now);
   if (!meeting) {
-    $("countdown").textContent = "–";
-    $("countdown-when").textContent = "No upcoming meeting is listed.";
+    setText("countdown", "–");
+    setText("countdown-when", "No upcoming meeting is listed.");
   } else {
-    const { days, hours, minutes } = lib.countdownParts(now, meeting.statement_at);
-    $("countdown").textContent = `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+    const two = (value) => String(value).padStart(2, "0");
+    const { days, hours, minutes, seconds } = lib.countdownParts(now, meeting.statement_at);
+    setText("countdown", `${days}d ${two(hours)}h ${two(minutes)}m ${two(seconds)}s`);
     // The same instant twice: in New York, and where the visitor is, which can be the next day.
-    const at = new Date(meeting.statement_at);
-    const parts = { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true };
-    const newYork = new Intl.DateTimeFormat("en-GB", { ...parts, timeZone: "America/New_York" }).format(at);
-    const local = new Intl.DateTimeFormat(undefined, { ...parts, timeZoneName: "short" }).format(at);
-    $("countdown-when").textContent = `${newYork} in New York · ${local} your time`;
+    const at = meeting.statement_at;
+    setText("countdown-when", `${lib.formatInstant(at, "America/New_York")} in New York · ${lib.formatInstant(at)} ${lib.zoneLabel(at)} your time`);
   }
-  const outdated = $("odds-outdated");
-  outdated.hidden = !lib.oddsAreOutdated(data.odds, data.fomc.meetings, now);
-  outdated.textContent = `These odds were calculated before the ${lib.formatDate(data.odds.meeting)} decision.`;
+  $("odds-outdated").hidden = !lib.oddsAreOutdated(data.odds, data.fomc.meetings, now);
+  setText("odds-outdated", `These odds were calculated before the ${lib.formatDate(data.odds.meeting)} decision.`);
+}
+
+/** Draws the clock now, and again at each whole second after. */
+function tick() {
+  renderClock();
+  setTimeout(tick, 1000 - (Date.now() % 1000));
 }
 
 /** After a change of width or colour scheme. The history chart realigns its own slider. */
@@ -277,8 +286,7 @@ function start(loaded) {
   renderTenor();
   applyRange(lib.presetRange(state.preset, first, last));
   renderOdds();
-  renderClock();
-  setInterval(renderClock, 30000);
+  tick();
 
   if (lib.publishedTargetLags(fed, data.odds)) {
     const note = $("fed-lag");

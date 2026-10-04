@@ -286,16 +286,29 @@ export function drawCurve(host, { tenors, points, mode, selected, title, onPick 
   const path = points.map((point, order) => `${order === 0 ? "M" : "L"}${xs[point.index].toFixed(1)} ${y(point.value).toFixed(1)}`).join(" ");
   root.append(svg("path", { d: path, class: "line" }));
 
-  for (const point of points) {
+  // In even spacing the chosen tenor gets the same vertical marker as the chosen date on the
+  // history chart. It sits above the slider's thumb. True scale has no marker: its slider is locked.
+  const marked = mode === "even";
+  if (marked) root.append(svg("line", { x1: xs[selected], x2: xs[selected], y1: top, y2: baseline, class: "marker" }));
+
+  points.forEach((point, order) => {
     const chosen = point.index === selected;
     const x = xs[point.index];
     const cy = y(point.value);
     root.append(svg("circle", { cx: x, cy, r: chosen ? 6 : 4, class: chosen ? "dot is-selected" : "dot" }));
-    if (chosen) {
-      const anchor = x > width - 60 ? "end" : x < left + 30 ? "start" : "middle";
-      root.append(svg("text", { x, y: cy - 12, class: "point-label", "text-anchor": anchor }, formatPercent(point.value)));
+    if (!chosen) return;
+    let shift = 0;
+    let anchor = x > width - 60 ? "end" : x < left + 30 ? "start" : "middle";
+    if (marked) {
+      // Beside the marker, so the line does not run through the number: on the side the curve leaves lower.
+      const before = points[order - 1];
+      const after = points[order + 1];
+      const onLeft = before !== undefined && (after === undefined || before.value <= after.value);
+      shift = onLeft ? -10 : 10;
+      anchor = onLeft ? "end" : "start";
     }
-  }
+    root.append(svg("text", { x: x + shift, y: cy - 12, class: "point-label", "text-anchor": anchor }, formatPercent(point.value)));
+  });
   // Hit targets go on top, and are much larger than the dots they stand for.
   for (const point of points) {
     const x = xs[point.index];

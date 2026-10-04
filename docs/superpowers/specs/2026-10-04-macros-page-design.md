@@ -106,6 +106,7 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 - A line with a marker per tenor. The title names the date.
 - A tenor slider sits under the chart, one step per tenor. It selects the tenor shown on the left. The default is 10Y. The selected tenor's marker is highlighted.
 - Clicking a point on the curve selects that tenor too, in either mode.
+- In even spacing, a vertical marker runs through the selected tenor, like the date marker on the history chart, and sits above the slider's thumb. The selected point's value is written beside the marker, not across it. True scale has no marker, because its slider is locked.
 - A "Show table" toggle lists tenor and yield for the selected date.
 - A mode toggle above the chart switches the horizontal axis between two modes:
   - **Even spacing**, the default. Tenors are evenly spaced and labelled (1M, 3M, ... 30Y). The tenor slider is active and its steps line up with the points.
@@ -124,14 +125,14 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 ### 5.4 Next FOMC decision
 
-**Countdown.** Days, hours and minutes to the scheduled statement, kept current in the browser. It shows the statement time in US Eastern time and in the visitor's local time. It always counts to the first meeting on the list that is still in the future.
+**Countdown.** Days, hours, minutes and seconds to the scheduled statement, redrawn every second in the browser. Its digits are all one width, so the line does not shift as it ticks, and its size follows the card's width, so it always fits on one line. Under it, the statement time is written twice in the same form, with the day each time: in New York, and where the visitor is, which can be the next day ("Wed 9 Dec, 2:00 pm in New York · Thu 10 Dec, 12:30 am IST your time"). The countdown always runs to the first meeting on the list that is still in the future.
 
 **Odds.**
 
 - A summary beside the countdown: cut, hold and hike percentages, the current range and the pricing date.
 - One bar per target range that has a non-zero probability, with the value printed on the bar. The current range is labelled "current". On a narrow screen a range is written on two lines under its bar.
 - Below both, a table with one row per range and columns `Now`, `1 day`, `1 week` and `1 month`, each headed by its date. A cell with no price data shows "n/a".
-- A note: "Own calculation from 30-Day Federal Funds futures prices, using the method CME Group publishes for its FedWatch tool. These are not CME FedWatch figures."
+- A note: "Own calculation from 30-Day Federal Funds futures prices, using the method CME Group publishes for its FedWatch tool. These are not CME FedWatch figures." The words "the method CME Group publishes" link to CME's methodology article.
 - If the meeting the odds refer to has already passed when the page is viewed, the block says the odds were calculated before that decision.
 
 ### 5.5 Fed funds rate
@@ -150,6 +151,7 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 ### 5.7 Header and footer
 
 - The header shows when the data was refreshed. If that is more than three days ago, it also says how many days old the data is.
+- The footer ends with a link to the project's code on GitHub, `https://github.com/Himanshujoy/Macros`: the GitHub mark, the words "Source code on GitHub", the repository's name and an arrow, as one target.
 - The footer carries the source credits and notices from section 6.1, and, when a snapshot has an analysis, the AI notice: "The analysis was written by an AI model (<model name>) from the data on this page. It can be wrong. Not investment advice."
 
 ### 5.8 Chart rules
@@ -173,6 +175,7 @@ The page's own code is three JavaScript modules: `lib.js` (pure helpers with no 
 
 - No cookies, no local storage, no analytics.
 - Every file loads from `macros.theta-markets.com`. No CDN, no web fonts; the page uses the system font stack.
+- The page links to two other sites: CME's methodology article and the GitHub repository. Both links open in a new tab with `rel="noopener noreferrer"`, and nothing is requested from either site unless the visitor follows the link.
 - A Content-Security-Policy header enforces this (section 8.2).
 
 ## 6. Data
@@ -587,7 +590,7 @@ Tests never touch a real service: no real network, no SSH, no box, no Cloudflare
 - **Server.** Started on a free localhost port: the allowlist, 404 and 405, headers, `ETag`, and picking up a switched release.
 - **Publish and rollback.** A fake command runner records the commands; the tests check their order and that a failure stops the sequence before the switch.
 - **Page logic.** The pure JavaScript helpers (nearest date, range clipping, tenor lookup, and point positions in both curve modes) run under Node's built-in test runner, with no npm packages. The Python suite runs them too, and skips them with a message where Node is not installed.
-- **Page files.** Static checks: every element the script looks up is on the page, nothing in the page would be blocked by the content security policy, every address the page asks for is local and carries the build id, every colour role exists in both themes, and the vendored library matches its published checksums.
+- **Page files.** Static checks: every element the script looks up is on the page, nothing in the page would be blocked by the content security policy, every address the page asks for is local and carries the build id, the only links to other sites are the two in section 5.9 and they carry the attributes named there, every colour role exists in both themes, and the vendored library matches its published checksums.
 
 Before Phase 2, the page is also checked by eye in the local preview, in light and dark themes and at phone width.
 

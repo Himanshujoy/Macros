@@ -9,19 +9,20 @@ A one-page view of US macro data, served at [`https://macros.theta-markets.com/`
 
 ## Status
 
-As of 2026-10-04 the data pipeline and the web server work: `python -m macro refresh` builds `dist/`, and `python -m macro preview` serves it locally. The page is still a placeholder that prints one line of data. The charts, the analysis PDF and publishing are not built yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
+As of 2026-10-04 the data pipeline, the web server and the page work: `python -m macro refresh` builds `dist/`, and `python -m macro preview` serves the finished page locally, with the yield charts and their sliders, the rate odds and countdown, and the Fed funds chart. The Explain Macros button stays disabled until the analysis PDF exists, and nothing is published yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
 
 ## How it works
 
 - **The Mac builds.** One command fetches the data, calculates the rate odds and builds the page into `dist/`.
 - **The server only serves.** The finished files are uploaded to a small server, which serves them as static files behind a Cloudflare Tunnel. It fetches nothing and holds no secrets.
 - **Refresh is manual.** The data changes only when the refresh command is run.
+- **The page is plain files.** `site/` holds one HTML file, one stylesheet and three JavaScript modules, with no build step and no npm packages. The two history charts use uPlot, a small MIT-licensed library copied into `site/vendor/`.
 
 The full design, including the server setup and the rollout steps, is in the [design spec](docs/superpowers/specs/2026-10-04-macros-page-design.md).
 
 ## Quick start
 
-Needs Python 3.12 or newer.
+Needs Python 3.12 or newer. Node 20 or newer is optional: with it the suite also runs the tests of the page's JavaScript helpers, and without it that one test is skipped.
 
 ```bash
 python3 -m venv .venv
@@ -38,7 +39,7 @@ Each command arrives with the plan that builds it. Run them with the project's i
 | Command | What it does | Status |
 |---|---|---|
 | `python -m macro refresh` | Fetches the data, calculates, and builds `dist/`. Add `--debug` to see a full error | Works |
-| `python -m macro preview` | Serves `dist/` at `http://127.0.0.1:8081/` with the server the box will run. `--port` picks another port | Works, with a placeholder page |
+| `python -m macro preview` | Serves `dist/` at `http://127.0.0.1:8081/` with the server the box will run. `--port` picks another port | Works |
 | `python -m macro analysis` | Turns an analysis file into the PDF | Plan 3 |
 | `python -m macro publish` | Uploads `dist/` to the server and switches to it | Plan 4 |
 | `python -m macro rollback` | Switches the server back to the previous snapshot | Plan 4 |

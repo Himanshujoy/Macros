@@ -153,11 +153,29 @@ test("nextMeeting is the first whose statement is still ahead", () => {
   assert.equal(lib.nextMeeting(MEETINGS, Date.parse("2027-01-01T00:00:00Z")), null);
 });
 
-test("countdownParts splits the time left and stops at zero", () => {
+test("countdownParts splits the time left down to the second and stops at zero", () => {
   const target = "2026-10-28T18:00:00Z";
-  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-04T01:55:00Z"), target), { days: 24, hours: 16, minutes: 5, past: false });
-  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-28T17:59:30Z"), target), { days: 0, hours: 0, minutes: 0, past: false });
-  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-29T00:00:00Z"), target), { days: 0, hours: 0, minutes: 0, past: true });
+  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-04T01:55:00Z"), target), { days: 24, hours: 16, minutes: 5, seconds: 0, past: false });
+  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-27T16:58:53Z"), target), { days: 1, hours: 1, minutes: 1, seconds: 7, past: false });
+  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-28T17:59:30.400Z"), target), { days: 0, hours: 0, minutes: 0, seconds: 29, past: false });
+  assert.deepEqual(lib.countdownParts(Date.parse("2026-10-29T00:00:00Z"), target), { days: 0, hours: 0, minutes: 0, seconds: 0, past: true });
+});
+
+test("formatInstant writes one instant as the clock reads in a given time zone, day first", () => {
+  assert.equal(lib.formatInstant("2026-10-28T18:00:00Z", "America/New_York"), "Wed 28 Oct, 2:00 pm");
+  assert.equal(lib.formatInstant("2026-10-28T18:00:00Z", "Asia/Kolkata"), "Wed 28 Oct, 11:30 pm");
+  assert.equal(lib.formatInstant("2026-12-09T19:00:00Z", "Asia/Kolkata"), "Thu 10 Dec, 12:30 am");
+  assert.equal(lib.formatInstant("2026-10-28T06:30:00Z", "Asia/Kolkata"), "Wed 28 Oct, 12:00 pm");
+  assert.equal(lib.formatInstant("2026-09-08T03:05:00Z", "UTC"), "Tue 8 Sep, 3:05 am");
+});
+
+test("zoneLabel prefers a familiar short name and falls back to an offset", () => {
+  assert.equal(lib.zoneLabel("2026-10-28T18:00:00Z", "Asia/Kolkata"), "IST");
+  assert.equal(lib.zoneLabel("2026-10-28T18:00:00Z", "America/New_York"), "EDT");
+  assert.equal(lib.zoneLabel("2026-12-09T19:00:00Z", "America/New_York"), "EST");
+  assert.equal(lib.zoneLabel("2026-07-01T12:00:00Z", "Europe/London"), "BST");
+  assert.equal(lib.zoneLabel("2026-12-09T19:00:00Z", "Europe/London"), "GMT");
+  assert.equal(lib.zoneLabel("2026-10-28T18:00:00Z", "Asia/Tokyo"), "GMT+9");
 });
 
 test("ageInDays counts whole days and never goes negative", () => {

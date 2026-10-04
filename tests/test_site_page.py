@@ -35,14 +35,27 @@ def test_the_page_has_nothing_the_content_security_policy_would_block():
 
 def test_every_file_the_page_loads_is_local_and_carries_the_build_id():
     page = read("index.html")
-    loaded = re.findall(r'<link\b[^>]*\bhref="([^"]+)"', page) + re.findall(r'<script\b[^>]*\bsrc="([^"]+)"', page)
+    loaded = []
+    for tag in re.findall(r"<(?:link|script|img|image|use|iframe|embed|object|source|video|audio)\b[^>]*>", page):
+        loaded += re.findall(r'\b(?:href|src|data)="([^"]+)"', tag)
     files = [address for address in loaded if not address.startswith("data:")]
     assert len(files) == 4
     for address in files:
         path, _, query = address.partition("?")
         assert query == BUILD_ID, address
-        assert "//" not in path and (SITE / path).is_file(), address
-    assert not re.search(r'(?:src|href)="(?:[a-z]+:)?//', page), "the page must load nothing from another site"
+        assert ":" not in path and "//" not in path and (SITE / path).is_file(), address
+
+
+def test_links_to_other_sites_open_in_a_new_tab_and_tell_them_nothing():
+    page = read("index.html")
+    outside = [tag for tag in re.findall(r"<a\b[^>]*>", page) if re.search(r'\bhref="[a-z]+:', tag)]
+    assert sorted(re.search(r'\bhref="([^"]+)"', tag).group(1) for tag in outside) == [
+        "https://github.com/Himanshujoy/Macros",
+        "https://www.cmegroup.com/articles/2023/understanding-the-cme-group-fedwatch-tool-methodology.html",
+    ]
+    for tag in outside:
+        assert 'target="_blank"' in tag and 'rel="noopener noreferrer"' in tag, tag
+    assert len(re.findall(r"https?://", page)) == len(outside), "nothing else on the page may name another site"
 
 
 @pytest.mark.parametrize("name", ["app.js", "charts.js"])

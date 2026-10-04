@@ -173,7 +173,13 @@
       "Bash(.venv/bin/python - tests/test_site_page.py)",
       "Bash(.venv/bin/python -m pytest tests/test_site_page.py)",
       "Bash(.venv/bin/python - site/index.html site/style.css site/charts.js site/app.js)",
-      "Bash(node --check site/lib.js)"
+      "Bash(node --check site/lib.js)",
+      "Bash(.venv/bin/python -m macro refresh)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(/private/tmp/claude-501/-Users-himanshusrivastava-Projects-Macros/a9f62a14-590a-44bf-9afe-dfd7282d5f4a/scratchpad/tools/bin/python /private/tmp/claude-501/-Users-himanshusrivastava-Projects-Macros/a9f62a14-590a-44bf-9afe-dfd7282d5f4a/scratchpad/shots.py /private/tmp/claude-501/-Users-himanshusrivastava-Projects-Macros/a9f62a14-590a-44bf-9afe-dfd7282d5f4a/scratchpad/shots-live base interact phone)",
+      "Bash(.venv/bin/python - tests/js/lib.test.js tests/test_site_page.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_site_helpers.py tests/test_site_page.py)",
+      "Bash(.venv/bin/python - site/lib.js site/charts.js site/app.js site/index.html site/style.css)"
     ],
     "additionalDirectories": [
       "/tmp"

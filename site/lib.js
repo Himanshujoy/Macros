@@ -1,6 +1,9 @@
 // Pure helpers for the page: no DOM and no network, so they run under `node --test`.
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Where to ask for a time zone's short name. Each of these knows the names used in its own region.
+const ZONE_NAME_LOCALES = ["en-IN", "en-US", "en-GB", "en-AU"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Which tenors get an axis label first when there is not room for all of them.
 const TENOR_LABEL_ORDER = ["10Y", "2Y", "30Y", "5Y", "3M", "1Y", "20Y", "7Y", "3Y", "6M", "1M"];
@@ -163,16 +166,46 @@ export function nextMeeting(meetings, nowMs) {
   return meetings.find((meeting) => Date.parse(meeting.statement_at) > nowMs) ?? null;
 }
 
-/** Whole days, hours and minutes from `nowMs` to an instant. All zero once it has passed. */
+/** Whole days, hours, minutes and seconds from `nowMs` to an instant. All zero once it has passed. */
 export function countdownParts(nowMs, target) {
   const left = Math.max(0, Date.parse(target) - nowMs);
-  const minutes = Math.floor(left / 60000);
+  const seconds = Math.floor(left / 1000);
   return {
-    days: Math.floor(minutes / 1440),
-    hours: Math.floor((minutes % 1440) / 60),
-    minutes: minutes % 60,
+    days: Math.floor(seconds / 86400),
+    hours: Math.floor((seconds % 86400) / 3600),
+    minutes: Math.floor((seconds % 3600) / 60),
+    seconds: seconds % 60,
     past: left === 0,
   };
+}
+
+/**
+ * An instant as the clock reads in one time zone: "Wed 28 Oct, 2:00 pm".
+ * With no zone it is the reader's own. Only the numbers come from the browser, so the wording
+ * is the same everywhere and matches the dates on the rest of the page.
+ */
+export function formatInstant(iso, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const number = (type) => Number(parts.find((part) => part.type === type).value);
+  const weekday = WEEKDAYS[new Date(Date.UTC(number("year"), number("month") - 1, number("day"))).getUTCDay()];
+  const hour = number("hour") % 24;
+  const minute = String(number("minute")).padStart(2, "0");
+  return `${weekday} ${number("day")} ${MONTHS[number("month") - 1]}, ${hour % 12 || 12}:${minute} ${hour < 12 ? "am" : "pm"}`;
+}
+
+/** A short name for a time zone at an instant, such as "IST" or "EDT", or an offset such as "GMT+9". */
+export function zoneLabel(iso, timeZone) {
+  const at = new Date(iso);
+  let offset = "";
+  for (const locale of ZONE_NAME_LOCALES) {
+    const parts = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: "short" }).formatToParts(at);
+    const name = parts.find((part) => part.type === "timeZoneName").value;
+    if (!/^(GMT|UTC)[+-]/.test(name)) return name;
+    offset ||= name;
+  }
+  return offset;
 }
 
 /** Whole days since the data was generated. */
