@@ -9,14 +9,15 @@ from pathlib import Path
 
 import httpx
 
-from macro import config
-from macro.build import build_dist
+from macro import analysis, config
+from macro.build import add_analysis, build_dist
 from macro.dates import add_months
-from macro.errors import MacroError, SourceError
+from macro.errors import AnalysisError, MacroError, SourceError
 from macro.facts import build_facts
 from macro.fedwatch import FedWatchError
 from macro.odds import build_odds
-from macro.snapshot import build_snapshot
+from macro.pdf import build_pdf, moment, page_count
+from macro.snapshot import STAMP, build_snapshot
 from macro.sources import fomc, futures, nyfed, treasury
 from server import serve
 
@@ -102,11 +103,70 @@ def summary_lines(result: dict) -> list[str]:
     return lines
 
 
+def read_json(path: Path, missing: str) -> dict:
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise AnalysisError(missing) from None
+    if not isinstance(content, dict) or not isinstance(content.get("snapshot_id"), str):
+        raise AnalysisError(missing)
+    return content
+
+
+def add_the_analysis(*, dist: Path, work: Path) -> dict:
+    """Checks work/analysis.json against the snapshot in dist/, draws the PDF and puts it into dist/."""
+    again = "Run `python -m macro refresh` first"
+    snapshot = read_json(dist / "data.json", f"analysis: dist/ holds no snapshot. {again}")
+    facts = read_json(work / "facts.json", f"analysis: work/facts.json is missing or unreadable. {again}")
+    if facts["snapshot_id"] != snapshot["snapshot_id"]:
+        raise AnalysisError(f"analysis: work/facts.json and dist/ come from different refreshes. {again}")
+    written = analysis.load(work / "analysis.json", snapshot["snapshot_id"])
+    refreshed_at = datetime.strptime(snapshot["generated_at"], STAMP).replace(tzinfo=timezone.utc)
+    pdf = build_pdf(written, facts, refreshed_at)
+    name = add_analysis(dist, pdf, written.model, written.written_at.strftime(STAMP))
+    return {"analysis": written, "file": name, "bytes": len(pdf), "pages": page_count(pdf)}
+
+
+def analysis_lines(result: dict) -> list[str]:
+    written = result["analysis"]
+    texts = written.texts()
+    pages = "1 page" if result["pages"] == 1 else f"{result['pages']} pages"
+    return [
+        f"Analysis for snapshot {written.snapshot_id} by {written.model}, written {moment(written.written_at)}",
+        f"{len(texts)} sections, {sum(len(text.split()) for text in texts)} words",
+        f"Added {result['file']} to dist/ ({pages}, {max(1, round(result['bytes'] / 1024))} KB)",
+        "Read it in `python -m macro preview` before publishing",
+    ]
+
+
+def run_command(label: str, debug: bool, action) -> int:
+    """Runs one command and turns a failure into a plain message. `action` returns the lines to print."""
+    try:
+        lines = action()
+    except MacroError as exc:
+        if debug:
+            raise
+        print(f"{label} stopped: {exc}", file=sys.stderr)
+        print("dist/ was not changed.", file=sys.stderr)
+        return 1
+    except Exception as exc:  # a bug or an unforeseen reply: say so plainly
+        if debug:
+            raise
+        print(f"{label} stopped by an unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print("Run it again with --debug to see the full error.", file=sys.stderr)
+        return 1
+    print("\n".join(lines))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m macro", description="Builds the macros page.")
     commands = parser.add_subparsers(dest="command", required=True)
+    debug_help = "show the full error instead of a one-line message"
     refresh_parser = commands.add_parser("refresh", help="fetch the data, calculate, and build dist/")
-    refresh_parser.add_argument("--debug", action="store_true", help="show the full error instead of a one-line message")
+    refresh_parser.add_argument("--debug", action="store_true", help=debug_help)
+    analysis_parser = commands.add_parser("analysis", help="check work/analysis.json, draw the PDF and add it to dist/")
+    analysis_parser.add_argument("--debug", action="store_true", help=debug_help)
     preview_parser = commands.add_parser("preview", help="serve dist/ on this Mac, to look at it before publishing")
     preview_parser.add_argument("--port", type=int, default=serve.DEFAULT_PORT, help="port on 127.0.0.1")
     args = parser.parse_args(argv)
@@ -123,21 +183,18 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     if args.command == "refresh":
-        try:
+
+        def refresh_now() -> list[str]:
             with make_client() as client:
-                result = refresh(client, utc_now(), **default_paths())
-        except MacroError as exc:
-            if args.debug:
-                raise
-            print(f"Refresh stopped: {exc}", file=sys.stderr)
-            print("dist/ was not changed.", file=sys.stderr)
-            return 1
-        except Exception as exc:  # a bug or an unforeseen reply: say so plainly
-            if args.debug:
-                raise
-            print(f"Refresh stopped by an unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
-            print("Run it again with --debug to see the full error.", file=sys.stderr)
-            return 1
-        print("\n".join(summary_lines(result)))
-        return 0
+                return summary_lines(refresh(client, utc_now(), **default_paths()))
+
+        return run_command("Refresh", args.debug, refresh_now)
+
+    if args.command == "analysis":
+
+        def analyse_now() -> list[str]:
+            paths = default_paths()
+            return analysis_lines(add_the_analysis(dist=paths["dist"], work=paths["work"]))
+
+        return run_command("Analysis", args.debug, analyse_now)
     return 2

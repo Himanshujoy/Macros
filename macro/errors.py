@@ -11,3 +11,7 @@ class SourceError(MacroError):
 
 class BuildError(MacroError):
     """The output folder could not be built."""
+
+
+class AnalysisError(MacroError):
+    """The analysis file is missing, or fails its checks."""

@@ -9,7 +9,7 @@ A one-page view of US macro data, served at [`https://macros.theta-markets.com/`
 
 ## Status
 
-As of 2026-10-04 the data pipeline, the web server and the page work: `python -m macro refresh` builds `dist/`, and `python -m macro preview` serves the finished page locally, with the yield charts and their sliders, the rate odds and countdown, and the Fed funds chart. The Explain Macros button stays disabled until the analysis PDF exists, and nothing is published yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
+As of 2026-10-04 the data pipeline, the web server and the page work: `python -m macro refresh` builds `dist/`, and `python -m macro preview` serves the finished page locally, with the yield charts and their sliders, the rate odds and countdown, and the Fed funds chart. `python -m macro analysis` adds the analysis PDF, which turns the Explain Macros button on. Nothing is published yet. Progress follows the plans in [docs/superpowers/plans/](docs/superpowers/plans/).
 
 ## How it works
 
@@ -40,11 +40,20 @@ Each command arrives with the plan that builds it. Run them with the project's i
 |---|---|---|
 | `python -m macro refresh` | Fetches the data, calculates, and builds `dist/`. Add `--debug` to see a full error | Works |
 | `python -m macro preview` | Serves `dist/` at `http://127.0.0.1:8081/` with the server the box will run. `--port` picks another port | Works |
-| `python -m macro analysis` | Turns an analysis file into the PDF | Plan 3 |
+| `python -m macro analysis` | Checks `work/analysis.json`, draws the PDF and adds it to `dist/`. Add `--debug` to see a full error | Works |
 | `python -m macro publish` | Uploads `dist/` to the server and switches to it | Plan 4 |
 | `python -m macro rollback` | Switches the server back to the previous snapshot | Plan 4 |
 
 The first refresh downloads one Treasury file per year since 1990, so it takes about half a minute. Later runs fetch only the current year.
+
+## Making an analysis
+
+1. Run `python -m macro refresh`. It writes the numbers to `work/facts.json`.
+2. Have a model write `work/analysis.json` from [prompts/analysis.md](prompts/analysis.md) and `work/facts.json`. For now that is an Opus subagent in a Claude Code session.
+3. Run `python -m macro analysis`. It refuses a file that is not plain text, is too short or too long, or was written for another snapshot, and says why.
+4. Run `python -m macro preview` and read the PDF before publishing.
+
+The numbers in the PDF's tables come from `work/facts.json`, never from the analysis text. A new refresh starts again without an analysis.
 
 ## Data sources
 

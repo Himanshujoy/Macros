@@ -144,7 +144,7 @@ On screens narrower than about 900 px, the side-by-side pairs stack.
 
 ### 5.6 Explain Macros button
 
-- A link styled as a button, at the top. It opens `analysis.pdf` in a new tab.
+- A link styled as a button, at the top. It opens the analysis PDF in a new tab.
 - Beside it: "AI-written analysis of this data" and the analysis date.
 - If a snapshot has no analysis, the button is disabled and says so.
 
@@ -292,22 +292,26 @@ The third row shows the expected size of differences: we use the day's closing p
 | `outlook.bonds`, `outlook.rates`, `outlook.fx`, `outlook.equities` | The likely effect on each |
 | `outlook.other` | Optional, for anything else worth noting |
 
-Each text field is plain text of 40 to 160 words.
+Each text field is plain text of 40 to 160 words: one paragraph, with no Markdown or HTML. `outlook` is an object holding the asset-class texts.
 
 **Who writes it, for now.** In a Claude Code session, an Opus subagent is given `prompts/analysis.md` and `work/facts.json`, and writes `work/analysis.json`. The prompt file tells the writer to use only the numbers given, to state uncertainty plainly and to write plain text. Keeping the prompt in the project means every analysis follows the same instructions.
 
 **Checks.** `python -m macro analysis` reads the file and stops with the reason if:
 
 - it is not valid JSON;
-- a required field is missing;
+- a required field is missing, or the file has a field that is not in the table above;
 - a text is outside its length bounds;
-- `snapshot_id` differs from the snapshot in `dist/`. This stops an old analysis being published with new data.
+- a text is not plain: the characters `*`, `` ` ``, `#`, `<`, `>` and `|` are refused, because the text is printed as it is;
+- a text holds a character the PDF's built-in font cannot print. Ordinary typography (dashes, curly quotes, an ellipsis) is fine;
+- `snapshot_id` differs from the snapshot in `dist/`, or `work/facts.json` comes from a different refresh. This stops an old analysis being published with new data.
 
-When the checks pass, the command writes `dist/analysis.pdf` and records the analysis in `data.json` and the manifest.
+When the checks pass, the command draws the PDF, puts it into `dist/` and records the analysis in `data.json` and the manifest. It works on a copy of `dist/` and swaps it in at the end, so a failure leaves `dist/` as it was.
+
+The PDF is named `analysis-<the first 12 characters of its checksum>.pdf`, and `data.json` records `{file, model, generated_at}`, where `generated_at` is the file's `written_at`. A rewritten analysis therefore gets a new address, and no browser shows an older copy it has cached. Running the command again replaces the earlier PDF. A new refresh starts again without an analysis.
 
 **Later.** A model API call can replace the subagent by producing the same file from the same prompt. Nothing else changes.
 
-**PDF.** Built with fpdf2 (on the Mac only), A4 portrait, using a built-in font:
+**PDF.** Built with fpdf2 2.8.9 (on the Mac only), A4 portrait, using a built-in font. Every number in it comes from `work/facts.json`, never from the analysis text, and the same inputs always give the same file:
 
 1. Title and snapshot date.
 2. "Data used": yields for 3M, 2Y, 5Y, 10Y and 30Y on the five dates, the three spreads, the target range and EFFR, and the odds table.
@@ -337,9 +341,9 @@ macro/                  Python package, runs on the Mac
   odds.py               the odds block of data.json
   facts.py              the numbers given to the analysis writer and printed in the PDF
   snapshot.py           assembles the content of data.json
-  analysis.py           checks an analysis file and records it in dist/
+  analysis.py           reads an analysis file and checks it
   pdf.py                the analysis PDF
-  build.py              writes dist/ with its manifest and checksums
+  build.py              writes dist/ with its manifest and checksums, and adds the analysis PDF to it
   publish.py            upload, switch, verify, prune, rollback
   cli.py
 server/serve.py         the web server; standard library only; runs on the box and in preview
@@ -584,8 +588,8 @@ Tests never touch a real service: no real network, no SSH, no box, no Cloudflare
 - **Network guard.** A test fixture refuses any connection that is not to localhost, so a forgotten mock fails loudly.
 - **Odds.** The check values in section 6.4, plus cuts, moves larger than 25 bp and a missing contract.
 - **Facts.** Date resolution across weekends and holidays, spreads, and changes.
-- **Analysis.** Sample files: a good one, invalid JSON, a missing field, an over-long text and a wrong snapshot id.
-- **PDF.** The output starts with `%PDF`, has at least one page and contains the section headings.
+- **Analysis.** Sample files: a good one, invalid JSON, a missing or unknown field, a text that is too short, too long, not plain or not printable, and a wrong snapshot id. A further test checks that the writer's instructions in `prompts/analysis.md` name every field and limit the checks enforce.
+- **PDF.** The output starts with `%PDF`, has at least one page, contains the section headings in order and the numbers from the facts, and is the same for the same inputs.
 - **Build.** The manifest lists every file with the right checksum. The build id is written into the page and its own scripts, and into nothing under `vendor/`.
 - **Server.** Started on a free localhost port: the allowlist, 404 and 405, headers, `ETag`, and picking up a switched release.
 - **Publish and rollback.** A fake command runner records the commands; the tests check their order and that a failure stops the sequence before the switch.

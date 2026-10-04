@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
+from analysis_samples import written
 from macro import cli
-from macro.errors import SourceError
+from macro.errors import AnalysisError, SourceError
 from samples import PRICES, chart_payload, effr_payload, treasury_csv_for
+from server import serve
 
 NOW = datetime(2026, 10, 3, 18, 15, 0, tzinfo=timezone.utc)
 SYMBOLS = {"ZQU26.CBT": (2026, 9), "ZQV26.CBT": (2026, 10), "ZQX26.CBT": (2026, 11)}
@@ -190,3 +192,120 @@ def test_preview_reports_a_port_it_cannot_use(paths, monkeypatch, capsys):
     monkeypatch.setattr(cli.serve, "run", busy)
     assert cli.main(["preview"]) == 1
     assert "--port" in capsys.readouterr().err
+
+
+# --- the analysis command
+
+
+def write_analysis(paths, **changes):
+    paths["work"].mkdir(parents=True, exist_ok=True)
+    (paths["work"] / "analysis.json").write_text(json.dumps(written(**changes)), encoding="utf-8")
+
+
+def analyse(paths):
+    return cli.add_the_analysis(dist=paths["dist"], work=paths["work"])
+
+
+def test_analysis_draws_the_pdf_and_records_it(paths):
+    run(paths)
+    write_analysis(paths)
+    result = analyse(paths)
+    name = result["file"]
+    assert (paths["dist"] / name).read_bytes().startswith(b"%PDF-")
+    data = json.loads((paths["dist"] / "data.json").read_text())
+    assert data["analysis"] == {"file": name, "model": "Claude Opus 5.5", "generated_at": "2026-10-03T19:00:00Z"}
+    assert data["odds"]["summary"] == {"cut": 0.0, "hold": 77.9, "hike": 22.1}
+    assert result["pages"] >= 1 and result["bytes"] == (paths["dist"] / name).stat().st_size
+
+
+def test_the_server_serves_a_release_that_has_an_analysis(paths):
+    run(paths)
+    write_analysis(paths)
+    name = analyse(paths)["file"]
+    release = serve.load_release(paths["dist"])
+    assert release is not None
+    assert release.files[name].content_type == "application/pdf"
+
+
+def test_analysis_lines_name_the_model_the_size_and_the_file(paths):
+    run(paths)
+    write_analysis(paths)
+    result = analyse(paths)
+    lines = cli.analysis_lines(result)
+    assert lines[0] == "Analysis for snapshot 20261003T181500Z by Claude Opus 5.5, written 3 Oct 2026, 19:00 UTC"
+    assert lines[1] == "7 sections, 420 words"
+    assert lines[2].startswith(f"Added {result['file']} to dist/ (")
+    assert "preview" in lines[3]
+
+
+def test_analysis_refuses_text_written_for_another_snapshot_and_leaves_dist_alone(paths):
+    run(paths)
+    before = {path.name: path.read_bytes() for path in paths["dist"].iterdir() if path.is_file()}
+    write_analysis(paths, snapshot_id="20260901T000000Z")
+    with pytest.raises(AnalysisError, match="written for snapshot 20260901T000000Z"):
+        analyse(paths)
+    assert {path.name: path.read_bytes() for path in paths["dist"].iterdir() if path.is_file()} == before
+
+
+def test_analysis_needs_a_refresh_first(paths):
+    write_analysis(paths)
+    with pytest.raises(AnalysisError, match="dist/ holds no snapshot. Run `python -m macro refresh` first"):
+        analyse(paths)
+
+
+def test_analysis_needs_the_facts_of_the_same_refresh(paths):
+    run(paths)
+    write_analysis(paths)
+    facts_file = paths["work"] / "facts.json"
+    facts = json.loads(facts_file.read_text())
+    facts_file.write_text(json.dumps({**facts, "snapshot_id": "20260901T000000Z"}))
+    with pytest.raises(AnalysisError, match="different refreshes"):
+        analyse(paths)
+    facts_file.unlink()
+    with pytest.raises(AnalysisError, match="work/facts.json is missing or unreadable"):
+        analyse(paths)
+
+
+def test_analysis_needs_the_analysis_file(paths):
+    run(paths)
+    with pytest.raises(AnalysisError, match="analysis.json does not exist"):
+        analyse(paths)
+
+
+def test_a_second_analysis_replaces_the_first(paths):
+    run(paths)
+    write_analysis(paths)
+    first = analyse(paths)["file"]
+    write_analysis(paths, written_at="2026-10-03T20:30:00Z", curve_now=" ".join(["revised"] * 60))
+    second = analyse(paths)["file"]
+    assert first != second
+    assert [path.name for path in paths["dist"].glob("*.pdf")] == [second]
+
+
+def test_main_runs_the_analysis_and_prints_the_summary(paths, monkeypatch, capsys):
+    run(paths)
+    write_analysis(paths)
+    patch_main(monkeypatch, paths)
+    assert cli.main(["analysis"]) == 0
+    out = capsys.readouterr().out
+    assert "by Claude Opus 5.5" in out and "7 sections, 420 words" in out
+
+
+def test_main_reports_a_bad_analysis_and_returns_1(paths, monkeypatch, capsys):
+    run(paths)
+    write_analysis(paths, curve_now="too short")
+    patch_main(monkeypatch, paths)
+    assert cli.main(["analysis"]) == 1
+    err = capsys.readouterr().err
+    assert "Analysis stopped: analysis: `curve_now` has 2 words; it needs at least 40" in err
+    assert "dist/ was not changed" in err
+    assert not list(paths["dist"].glob("*.pdf"))
+
+
+def test_a_refresh_after_an_analysis_starts_again_without_one(paths):
+    run(paths)
+    write_analysis(paths)
+    analyse(paths)
+    run(paths)
+    assert json.loads((paths["dist"] / "data.json").read_text())["analysis"] is None
+    assert not list(paths["dist"].glob("*.pdf"))
