@@ -4,6 +4,7 @@ The numbers come from work/facts.json, never from the analysis text. See section
 """
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime
 
@@ -166,6 +167,153 @@ def fed_funds_sentence(fed: dict) -> str:
     return text
 
 
+# Series colours for the curve chart, in a fixed order: the latest curve first.
+SERIES = [(42, 120, 214), (235, 104, 52), (27, 175, 122), (237, 161, 0), (232, 123, 164)]
+GRID = (225, 224, 217)
+
+
+def round_ticks(low: float, high: float, count: int = 5) -> list[float]:
+    """Round axis values that cover low to high."""
+    if high <= low:
+        low, high = low - 0.5, high + 0.5
+    rough = (high - low) / count
+    power = 10 ** math.floor(math.log10(rough))
+    step = next(f * power for f in (1, 2, 2.5, 5, 10) if f * power >= rough - 1e-12)
+    start = math.floor(low / step + 1e-9) * step
+    ticks = []
+    value = start
+    while value <= high + step - 1e-9:
+        ticks.append(round(value, 6))
+        if value >= high - 1e-9:
+            break
+        value += step
+    return ticks
+
+
+def tick_text(value: float) -> str:
+    return f"{value:g}%"
+
+
+def chart_room(pdf: Report, height: float) -> None:
+    if pdf.will_page_break(height):
+        pdf.add_page()
+
+
+def caption(pdf: Report, text: str) -> None:
+    pdf.set_font(FONT, size=9)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(0, 5, text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+
+def curve_chart(pdf: Report, facts: dict) -> None:
+    """The yield curve on all five dates in one chart, tenors evenly spaced."""
+    curves = facts["curves"]
+    tenors = list(curves[0]["yields"])
+    values = [value for curve in curves for value in curve["yields"].values() if value is not None]
+    if len(tenors) < 2 or not values:
+        return
+    chart_room(pdf, 88)
+    caption(pdf, "Yield curves on the five dates, percent")
+    ticks = round_ticks(min(values), max(values))
+    low, high = ticks[0], ticks[-1]
+    left = pdf.l_margin + 12
+    top = pdf.get_y() + 3
+    width = pdf.epw - 14
+    height = 58
+    bottom = top + height
+
+    def x(index: int) -> float:
+        return left + index * width / (len(tenors) - 1)
+
+    def y(value: float) -> float:
+        return bottom - (value - low) / (high - low) * height
+
+    pdf.set_font(FONT, size=7.5)
+    pdf.set_line_width(0.15)
+    for tick in ticks:
+        pdf.set_draw_color(*GRID)
+        pdf.line(left, y(tick), left + width, y(tick))
+        label = tick_text(tick)
+        pdf.set_text_color(*MUTED)
+        pdf.text(left - 2 - pdf.get_string_width(label), y(tick) + 1, label)
+    for index, tenor in enumerate(tenors):
+        pdf.text(x(index) - pdf.get_string_width(tenor) / 2, bottom + 4.5, tenor)
+
+    # Oldest first, so the latest curve is drawn on top.
+    for order in range(len(curves) - 1, -1, -1):
+        curve = curves[order]
+        points = [(x(i), y(curve["yields"][t])) for i, t in enumerate(tenors) if curve["yields"].get(t) is not None]
+        if len(points) < 2:
+            continue
+        pdf.set_draw_color(*SERIES[order % len(SERIES)])
+        pdf.set_line_width(0.7 if order == 0 else 0.4)
+        pdf.polyline(points, style="D")
+
+    # Legend: a short line in the series colour, then the date and its label.
+    pdf.set_line_width(0.7)
+    pdf.set_font(FONT, size=7.5)
+    pdf.set_text_color(*INK)
+    lx = left
+    ly = bottom + 10
+    for order, curve in enumerate(curves):
+        label = f"{day(curve['date'])}, {curve['label']}"
+        if lx + 6.5 + pdf.get_string_width(label) > pdf.l_margin + pdf.epw:
+            lx = left  # no room left on this row: start another
+            ly += 5
+        pdf.set_draw_color(*SERIES[order % len(SERIES)])
+        pdf.line(lx, ly - 1, lx + 5, ly - 1)
+        pdf.text(lx + 6.5, ly, label)
+        lx += 6.5 + pdf.get_string_width(label) + 5
+    pdf.set_line_width(0.2)
+    pdf.set_y(ly + 4)
+
+
+def odds_chart(pdf: Report, odds: dict, meeting: dict) -> None:
+    """Probability of each target range after the decision, as columns: the FedWatch view."""
+    outcomes = odds["outcomes"]
+    if not outcomes:
+        return
+    chart_room(pdf, 72)
+    caption(pdf, f"Target range probabilities for the {day(meeting['date'])} decision, now, percent")
+    left = pdf.l_margin + 12
+    top = pdf.get_y() + 4
+    width = pdf.epw - 14
+    height = 45
+    bottom = top + height
+
+    def y(percent: float) -> float:
+        return bottom - percent / 100 * height
+
+    pdf.set_font(FONT, size=7.5)
+    pdf.set_line_width(0.15)
+    for tick in (0, 25, 50, 75, 100):
+        pdf.set_draw_color(*(RULE if tick == 0 else GRID))
+        pdf.line(left, y(tick), left + width, y(tick))
+        label = f"{tick}%"
+        pdf.set_text_color(*MUTED)
+        pdf.text(left - 2 - pdf.get_string_width(label), y(tick) + 1, label)
+
+    slot = width / len(outcomes)
+    bar = min(14.0, slot * 0.5)
+    for index, outcome in enumerate(outcomes):
+        centre = left + slot * (index + 0.5)
+        value = outcome["now"] or 0.0
+        pdf.set_fill_color(*SERIES[0])
+        if value > 0:
+            pdf.rect(centre - bar / 2, y(value), bar, bottom - y(value), style="F")
+        pdf.set_font(FONT, style="B", size=8.5)
+        pdf.set_text_color(*INK)
+        label = f"{value:.1f}%"
+        pdf.text(centre - pdf.get_string_width(label) / 2, y(value) - 1.5, label)
+        pdf.set_font(FONT, size=7.5)
+        name = band(outcome["range"])
+        pdf.text(centre - pdf.get_string_width(name) / 2, bottom + 4.5, name)
+        if outcome["range"][0] == odds["current_range"][0]:
+            pdf.set_text_color(*MUTED)
+            pdf.text(centre - pdf.get_string_width("current") / 2, bottom + 8.5, "current")
+    pdf.set_y(bottom + 12)
+
+
 def build_pdf(analysis: Analysis, facts: dict, refreshed_at: datetime) -> bytes:
     """The whole document as bytes. The same inputs always give the same bytes."""
     pdf = Report(orientation="portrait", unit="mm", format="A4")
@@ -195,6 +343,7 @@ def build_pdf(analysis: Analysis, facts: dict, refreshed_at: datetime) -> bytes:
     summary = odds["summary"]
     heading(pdf, "Data used")
     table(pdf, "Treasury par yields, percent", yields_rows(facts), first=26)
+    curve_chart(pdf, facts)
     table(pdf, "Curve spreads, basis points", spread_rows(facts), first=26)
     paragraph(pdf, fed_funds_sentence(facts["fed_funds"]))
     table(
@@ -204,6 +353,7 @@ def build_pdf(analysis: Analysis, facts: dict, refreshed_at: datetime) -> bytes:
         first=58,
     )
     paragraph(pdf, f"Cut {summary['cut']:.1f}%, hold {summary['hold']:.1f}%, hike {summary['hike']:.1f}%.")
+    odds_chart(pdf, odds, meeting)
 
     for name, title in SECTION_TITLES:
         heading(pdf, title)
